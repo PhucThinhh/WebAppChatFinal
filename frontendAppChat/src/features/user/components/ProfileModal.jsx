@@ -40,7 +40,6 @@ function ProfileModal({ onClose, refreshUser }) {
     fetchUser();
   }, []);
 
-  // Hàm chuyển đổi giới tính sang tiếng Việt
   const renderGender = (gender) => {
     if (gender === "MALE") return "Nam";
     if (gender === "FEMALE") return "Nữ";
@@ -119,95 +118,109 @@ function ProfileModal({ onClose, refreshUser }) {
   if (!user) return null;
 
   return (
-    <div style={styles.overlay}>
-      <div style={styles.modal}>
-        <div style={styles.header}>
-          <span style={{ fontWeight: "600" }}>Thông tin tài khoản</span>
-          <span style={styles.close} onClick={onClose}>
+    <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[999] p-4">
+      <div className="w-full max-w-[400px] bg-[#1e2124] rounded-lg overflow-hidden text-white shadow-2xl">
+        {/* HEADER */}
+        <div className="p-3 px-4 flex justify-between items-center border-b border-[#333]">
+          <span className="font-semibold">Thông tin tài khoản</span>
+          <span
+            className="cursor-pointer text-[#b0b3b8] text-lg hover:text-white transition-colors"
+            onClick={onClose}
+          >
             ✖
           </span>
         </div>
 
+        {/* COVER PHOTO */}
         <div
-          style={{
-            ...styles.cover,
-            backgroundImage: `url(${user.cover || DEFAULT_COVER_URL})`,
-          }}
+          className="h-40 bg-cover bg-center relative cursor-pointer group"
+          style={{ backgroundImage: `url(${user.cover || DEFAULT_COVER_URL})` }}
           onClick={() => coverRef.current.click()}
         >
-          <div style={styles.coverIcon}>
-            <FaCamera size={14} color="white" />
+          <div className="absolute bottom-3 right-3 bg-black/50 p-2 rounded-full border border-white/20 group-hover:bg-black/70 transition-all">
+            <FaCamera size={14} className="text-white" />
           </div>
         </div>
 
-        <div style={styles.profileInfoHorizontal}>
+        {/* AVATAR & NAME */}
+        <div className="flex items-end px-5 -mt-[50px] mb-5">
           <div
-            style={styles.avatarWrapper}
+            className="relative inline-block cursor-pointer group"
             onClick={() => avatarRef.current.click()}
           >
             <img
               src={user.avatar || DEFAULT_AVATAR_URL}
-              style={styles.avatar}
+              className="w-[100px] h-[100px] rounded-full border-4 border-[#1e2124] object-cover shadow-lg"
               alt="avatar"
             />
-            <div style={styles.cameraIcon}>
-              <FaCamera size={12} color="white" />
+            <div className="absolute bottom-1 right-1 bg-[#2a2e33] rounded-full p-1.5 border-2 border-[#1e2124] group-hover:bg-[#3a3f45] transition-all">
+              <FaCamera size={12} className="text-white" />
             </div>
           </div>
-          <div style={styles.nameContainer}>
-            <h3 style={styles.username}>{user.username || "Phúc Thịnh"}</h3>
+          <div className="ml-4 pb-1">
+            <h3 className="text-lg font-semibold leading-tight">
+              {user.username || "Phúc Thịnh"}
+            </h3>
           </div>
         </div>
 
-        <div style={styles.info}>
-          <h4 style={{ color: "#fff", marginBottom: "15px", fontSize: "16px" }}>
+        {/* INFO SECTION */}
+        <div className="px-5">
+          <h4 className="text-white mb-4 text-base font-medium">
             Thông tin cá nhân
           </h4>
-          <div style={styles.infoGrid}>
-            <div style={styles.infoLabel}>Giới tính</div>
-            <div style={styles.infoValue}>{renderGender(user.gender)}</div>
-            <div style={styles.infoLabel}>Ngày sinh</div>
-            <div style={styles.infoValue}>
+          <div className="grid grid-cols-[1fr_1.5fr] gap-2.5 mb-2.5 text-[#b0b3b8] text-sm">
+            <span>Giới tính</span>
+            <span className="text-white">{renderGender(user.gender)}</span>
+            <span>Ngày sinh</span>
+            <span className="text-white">
               {user.birthday || "01 tháng 01, 2007"}
-            </div>
-            <div style={styles.infoLabel}>Điện thoại</div>
-            <div style={styles.infoValue}>
+            </span>
+            <span>Điện thoại</span>
+            <span className="text-white">
               {user.phone || "+84 947 579 831"}
-            </div>
+            </span>
           </div>
-          <p style={styles.privacyNote}>
+          <p className="text-[12px] text-[#8a8d91] mt-4 leading-relaxed mb-5">
             Chỉ bạn bè có lưu số của bạn trong danh bạ máy xem được số này
           </p>
         </div>
 
-        {/* NÚT CẬP NHẬT ĐÃ SỬA CSS */}
-        <div style={styles.btnWrapper}>
-          <button style={styles.btnUpdate} onClick={() => setShowEdit(true)}>
-            <span style={styles.editBtnIcon}>✎</span> Cập nhật
+        {/* UPDATE BUTTON */}
+        <div className="p-5 pt-4 border-t border-[#333]">
+          <button
+            className="w-full flex items-center justify-center py-2.5 bg-transparent border border-[#3e4042] text-white rounded-full font-medium text-[15px] hover:bg-[#3e4042] transition-colors"
+            onClick={() => setShowEdit(true)}
+          >
+            <span className="mr-2 text-base">✎</span> Cập nhật
           </button>
         </div>
 
+        {/* HIDDEN INPUTS */}
         <input
           type="file"
           accept="image/*"
           ref={avatarRef}
-          style={{ display: "none" }}
+          className="hidden"
           onChange={handleSelectAvatar}
         />
         <input
           type="file"
           accept="image/*"
           ref={coverRef}
-          style={{ display: "none" }}
+          className="hidden"
           onChange={handleUploadCover}
         />
       </div>
 
+      {/* CROP MODAL */}
       {showCrop && (
-        <div style={styles.cropOverlay}>
-          <div style={styles.cropContainer}>
-            <div style={styles.cropHeader}>Cập nhật ảnh đại diện</div>
-            <div style={styles.cropBody}>
+        <div className="fixed inset-0 bg-black/90 flex justify-center items-center z-[1000] p-4">
+          <div className="w-full max-w-[420px] bg-[#242526] rounded-lg overflow-hidden shadow-2xl">
+            <div className="p-4 text-center border-b border-[#3e4042] font-bold text-white">
+              Cập nhật ảnh đại diện
+            </div>
+            <div className="h-[350px] relative bg-black">
               <Cropper
                 image={preview}
                 crop={crop}
@@ -218,17 +231,17 @@ function ProfileModal({ onClose, refreshUser }) {
                 onCropComplete={onCropComplete}
               />
             </div>
-            <div style={styles.cropFooter}>
+            <div className="p-4 flex justify-end gap-3 bg-[#242526]">
               <button
                 onClick={() => setShowCrop(false)}
-                style={styles.btnCancel}
+                className="px-5 py-2 bg-transparent text-[#b0b3b8] border border-[#3e4042] rounded hover:bg-[#3a3b3c] transition-colors"
               >
                 Hủy
               </button>
               <button
                 onClick={handleUploadAvatar}
-                style={styles.btnSave}
                 disabled={loading}
+                className="px-5 py-2 bg-[#005ae0] text-white rounded font-semibold hover:bg-[#0064f0] disabled:opacity-50 transition-colors"
               >
                 {loading ? "Đang lưu..." : "Lưu ảnh"}
               </button>
@@ -236,6 +249,7 @@ function ProfileModal({ onClose, refreshUser }) {
           </div>
         </div>
       )}
+
       {showEdit && (
         <EditProfileModal
           user={user}
@@ -246,170 +260,5 @@ function ProfileModal({ onClose, refreshUser }) {
     </div>
   );
 }
-
-const styles = {
-  overlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.7)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 999,
-  },
-  modal: {
-    width: "400px",
-    background: "#1e2124",
-    borderRadius: "8px",
-    overflow: "hidden",
-    color: "#fff",
-  },
-  header: {
-    padding: "12px 16px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderBottom: "1px solid #333",
-  },
-  close: { cursor: "pointer", color: "#b0b3b8", fontSize: "18px" },
-  cover: {
-    height: "160px",
-    backgroundSize: "cover",
-    backgroundPosition: "center",
-    position: "relative",
-    cursor: "pointer",
-  },
-  coverIcon: {
-    position: "absolute",
-    bottom: "12px",
-    right: "12px",
-    background: "rgba(0,0,0,0.5)",
-    padding: "8px",
-    borderRadius: "50%",
-    border: "1px solid rgba(255,255,255,0.2)",
-  },
-  profileInfoHorizontal: {
-    display: "flex",
-    alignItems: "flex-end",
-    padding: "0 20px",
-    marginTop: "-60px",
-    marginBottom: "20px",
-  },
-  avatarWrapper: {
-    position: "relative",
-    display: "inline-block",
-    cursor: "pointer",
-  },
-  avatar: {
-    width: "100px",
-    height: "100px",
-    borderRadius: "50%",
-    border: "4px solid #1e2124",
-    objectFit: "cover",
-    boxShadow: "0 2px 10px rgba(0,0,0,0.3)",
-  },
-  cameraIcon: {
-    position: "absolute",
-    bottom: "5px",
-    right: "5px",
-    background: "#2a2e33",
-    borderRadius: "50%",
-    padding: "6px",
-    border: "2px solid #1e2124",
-  },
-  nameContainer: {
-    display: "flex",
-    alignItems: "center",
-    marginLeft: "15px",
-    paddingBottom: "5px",
-  },
-  username: { margin: 0, fontSize: "18px", fontWeight: "600" },
-  info: { padding: "0 20px" },
-  infoGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1.5fr",
-    gap: "10px",
-    marginBottom: "10px",
-    color: "#b0b3b8",
-  },
-  infoLabel: { fontSize: "14px" },
-  infoValue: { fontSize: "14px", color: "white" },
-  privacyNote: {
-    fontSize: "12px",
-    color: "#8a8d91",
-    marginTop: "10px",
-    lineHeight: "1.4",
-    marginBottom: "20px",
-  },
-
-  // CSS NÚT CẬP NHẬT MỚI
-  btnWrapper: {
-    padding: "0 20px 20px 20px",
-    borderTop: "1px solid #333",
-    paddingTop: "15px",
-  },
-  btnUpdate: {
-    width: "100%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "10px",
-    background: "transparent", // Nền trong suốt hoặc tối theo Zalo
-    border: "1px solid #3e4042",
-    color: "#fff",
-    borderRadius: "20px", // Bo tròn nhiều hơn giống nút hiện đại
-    cursor: "pointer",
-    fontWeight: "500",
-    fontSize: "15px",
-    transition: "background 0.2s",
-  },
-  editBtnIcon: { marginRight: "8px", fontSize: "16px" },
-
-  cropOverlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.9)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 1000,
-  },
-  cropContainer: {
-    width: "420px",
-    background: "#242526",
-    borderRadius: "8px",
-    overflow: "hidden",
-  },
-  cropHeader: {
-    padding: "15px",
-    textAlign: "center",
-    borderBottom: "1px solid #3e4042",
-    fontWeight: "bold",
-  },
-  cropBody: { height: "350px", position: "relative", background: "#000" },
-  cropFooter: {
-    padding: "15px",
-    display: "flex",
-    justifyContent: "flex-end",
-    gap: "10px",
-  },
-  btnSave: {
-    padding: "8px 20px",
-    background: "#005ae0",
-    color: "#fff",
-    border: "none",
-    borderRadius: "4px",
-    cursor: "pointer",
-    fontWeight: "600",
-  },
-  btnCancel: {
-    padding: "8px 20px",
-    background: "transparent",
-    color: "#b0b3b8",
-    border: "1px solid #3e4042",
-    borderRadius: "4px",
-    cursor: "pointer",
-  },
-};
 
 export default ProfileModal;

@@ -1,15 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { sendOtpApi, verifyOtpApi, registerApi } from "../api/authApi";
 import { Eye, EyeOff } from "lucide-react";
+import { toast } from "react-toastify";
 
 function RegisterPage() {
   const navigate = useNavigate();
 
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-   const [showPassword, setShowPassword] = useState(false);
-
+  const [showPassword, setShowPassword] = useState(false);
+  const [cooldowns, setCooldowns] = useState({});
   // State lưu trữ thông tin
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -20,30 +21,55 @@ function RegisterPage() {
   const [password, setPassword] = useState("");
 
   const [errors, setErrors] = useState({});
+  const [timeLeft, setTimeLeft] = useState(0);
+
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft]);
+
+useEffect(() => {
+  const timer = setInterval(() => {
+    setCooldowns((prev) => {
+      const updated = { ...prev };
+
+      Object.keys(updated).forEach((key) => {
+        if (updated[key] > 0) {
+          updated[key] -= 1;
+        }
+      });
+
+      return updated;
+    });
+  }, 1000);
+
+  return () => clearInterval(timer);
+}, []);
+  
 
   // ================= VALIDATE LOGIC =================
   const validateBirthday = (value) => {
     if (!value) return "Vui lòng chọn ngày sinh";
-
     const birthDate = new Date(value);
     const today = new Date();
-
-    // Tính toán số tuổi
     let age = today.getFullYear() - birthDate.getFullYear();
     const monthDiff = today.getMonth() - birthDate.getMonth();
-
-    // Kiểm tra nếu chưa tới sinh nhật trong năm hiện tại thì trừ đi 1 tuổi
     if (
       monthDiff < 0 ||
       (monthDiff === 0 && today.getDate() < birthDate.getDate())
     ) {
       age--;
     }
-
     if (age < 13) return "Bạn phải trên 13 tuổi để đăng ký";
     if (age > 100) return "Ngày sinh không hợp lệ";
     return "";
   };
+
   const validateEmail = (value) => {
     if (!value) return "Vui lòng nhập email";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Email không hợp lệ";
@@ -55,7 +81,6 @@ function RegisterPage() {
     if (!/^(0|\+84)[0-9]{9}$/.test(value)) return "SĐT không hợp lệ (10 số)";
     return "";
   };
-  
 
   const validatePassword = (value) => {
     if (!value) return "Vui lòng nhập mật khẩu";
@@ -72,25 +97,21 @@ function RegisterPage() {
     if (/[A-Z]/.test(password)) score++;
     if (/\d/.test(password)) score++;
     if (/[@$!%*?&]/.test(password)) score++;
-
-    if (score <= 1) return { text: "Yếu", color: "#ff4d4f" };
+    if (score <= 1) return { text: "Yếu", color: "text-red-500" };
     if (score === 2 || score === 3)
-      return { text: "Trung bình", color: "#faad14" };
-    return { text: "Mạnh", color: "#52c41a" };
+      return { text: "Trung bình", color: "text-yellow-500" };
+    return { text: "Mạnh", color: "text-green-500" };
   };
 
-  // ================= HANDLE CHANGE =================
   const handleChange = (field, value) => {
     let error = "";
     if (field === "email") error = validateEmail(value);
     if (field === "phone") error = validatePhone(value);
     if (field === "password") error = validatePassword(value);
-    // Thêm dòng này:
     if (field === "birthday") error = validateBirthday(value);
 
     setErrors((prev) => ({ ...prev, [field]: error }));
 
-    // ... giữ nguyên phần cập nhật giá trị (setEmail, setBirthday...)
     if (field === "email") setEmail(value);
     else if (field === "otp") setOtp(value);
     else if (field === "username") setUsername(value);
@@ -100,15 +121,30 @@ function RegisterPage() {
     else if (field === "password") setPassword(value);
   };
 
-  // ================= API CALLS =================
+
   const handleSendOtp = async () => {
     const emailError = validateEmail(email);
     if (emailError) return setErrors({ email: emailError });
 
+    // 👇 CHECK THEO EMAIL
+    if (cooldowns[email] > 0) {
+      toast.warning(`Email này cần chờ ${cooldowns[email]}s`);
+      return;
+    }
+
     setLoading(true);
     try {
       await sendOtpApi(email);
+
       setStep(2);
+      setTimeLeft(300);
+
+      // 👇 SET cooldown riêng cho email
+      setCooldowns((prev) => ({
+        ...prev,
+        [email]: 60,
+      }));
+
       setErrors({});
     } catch {
       setErrors({ email: "Gửi OTP thất bại" });
@@ -118,6 +154,9 @@ function RegisterPage() {
   };
 
   const handleVerifyOtp = async () => {
+    if (timeLeft <= 0) {
+      return setErrors({ otp: "OTP đã hết hạn" });
+    }
     if (!otp) return setErrors({ otp: "Vui lòng nhập OTP" });
     setLoading(true);
     try {
@@ -131,6 +170,8 @@ function RegisterPage() {
     }
   };
 
+  
+
   const handleRegister = async () => {
     const newErrors = {
       username: !username ? "Vui lòng nhập tên" : "",
@@ -139,41 +180,26 @@ function RegisterPage() {
       gender: !gender ? "Vui lòng chọn giới tính" : "",
       birthday: validateBirthday(birthday),
     };
-
     setErrors(newErrors);
     if (Object.values(newErrors).some((e) => e)) return;
-
     setLoading(true);
-
     try {
-      await registerApi({
-        username,
-        password,
-        email,
-        phone,
-        gender,
-        birthday,
-      });
-
-      alert("Đăng ký thành công! 🎉");
+      await registerApi({ username, password, email, phone, gender, birthday });
+      toast.success("Đăng ký thành công! 🎉");
       navigate("/login");
     } catch (err) {
-      console.log("ERROR:", err.response);
-
       const message =
         err.response?.data || err.response?.data?.message || "Đăng ký thất bại";
-
-      // 🔥 map lỗi vào đúng field
       if (message.includes("Email")) {
         setErrors((prev) => ({ ...prev, email: message }));
-        setStep(1); // 👈 quay lại step email
+        setStep(1);
       } else if (message.includes("SĐT")) {
         setErrors((prev) => ({ ...prev, phone: message }));
       } else if (message.includes("OTP")) {
         setErrors((prev) => ({ ...prev, otp: message }));
         setStep(2);
       } else {
-        alert(message); // fallback
+        alert(message);
       }
     } finally {
       setLoading(false);
@@ -182,15 +208,24 @@ function RegisterPage() {
 
   const strength = getPasswordStrength();
 
+  // Reusable Input Class
+  const inputBaseClass =
+    "w-full px-[18px] py-[13px] rounded-[15px] border-none bg-[#f0f2f5] shadow-[inset_4px_4px_8px_#d1d9e6,inset_-4px_-4px_8px_#ffffff] text-[#333] text-[15px] outline-none focus:ring-2 focus:ring-[#005ae0]/20 transition-all";
+
   return (
-    <div style={styles.container}>
-      <div style={styles.bubbleCard}>
-        <div style={styles.logoWrapper}>
-          <div style={styles.logoBubble}>✨</div>
+    <div className="fixed inset-0 w-screen h-screen flex justify-center items-center bg-white z-[9999]">
+      <div className="w-[380px] p-10 bg-white rounded-[35px] shadow-[20px_20px_60px_#d9d9d9,-20px_-20px_60px_#ffffff] text-center">
+        {/* LOGO */}
+        <div className="flex justify-center mb-4">
+          <div className="w-[60px] h-[60px] rounded-full bg-white flex items-center justify-center text-3xl shadow-[inset_6px_6px_12px_#d9d9d9,inset_-6px_-6px_12px_#ffffff]">
+            ✨
+          </div>
         </div>
 
-        <h2 style={styles.title}>Tham gia ChatApp</h2>
-        <p style={styles.subtitle}>
+        <h2 className="text-[#333] text-[22px] font-bold mb-1.5">
+          Tham gia ChatApp
+        </h2>
+        <p className="text-[#888] text-sm mb-[25px]">
           Bước {step} / 3:{" "}
           {step === 1
             ? "Xác thực Email"
@@ -199,156 +234,238 @@ function RegisterPage() {
             : "Thông tin cá nhân"}
         </p>
 
-        {/* STEP 1: NHẬP EMAIL */}
+        {/* STEP 1: EMAIL */}
         {step === 1 && (
-          <div style={styles.fadeAnim}>
-            <div style={styles.inputGroup}>
-              <label style={styles.inputLabel}>Email đăng ký</label>
+          <div className="animate-in fade-in duration-500">
+            <div className="text-left mb-[18px]">
+              <label className="block text-[#555] mb-2 text-[13px] font-semibold ml-1.5">
+                Email đăng ký
+              </label>
               <input
                 type="email"
                 placeholder="example@gmail.com"
                 value={email}
                 onChange={(e) => handleChange("email", e.target.value)}
-                style={styles.input}
+                className={inputBaseClass}
                 onKeyDown={(e) => e.key === "Enter" && handleSendOtp()}
               />
-              {errors.email && <p style={styles.errorText}>{errors.email}</p>}
+              {errors.email && (
+                <p className="text-[#ff4d4f] text-xs mt-1.5 ml-1.5">
+                  {errors.email}
+                </p>
+              )}
             </div>
             <button
               onClick={handleSendOtp}
-              style={styles.bubbleButton}
               disabled={loading}
+              className="w-full py-[15px] rounded-[30px] bg-[#005ae0] text-white text-base font-bold shadow-[0_10px_20px_rgba(0,90,224,0.2)] hover:bg-[#004bbd] active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-wait"
             >
               {loading ? "Đang gửi OTP..." : "Tiếp theo"}
             </button>
           </div>
         )}
 
-        {/* STEP 2: NHẬP OTP */}
+        {/* STEP 2: OTP */}
         {step === 2 && (
-          <div style={styles.fadeAnim}>
-            <div style={styles.inputGroup}>
-              <label style={styles.inputLabel}>Mã xác thực (OTP)</label>
+          <div className="animate-in fade-in duration-500">
+            <div className="text-left mb-[18px]">
+              <label className="block text-[#555] mb-2 text-[13px] font-semibold ml-1.5">
+                Mã xác thực (OTP)
+              </label>
+
               <input
                 placeholder="Nhập 6 số OTP"
                 value={otp}
                 onChange={(e) => handleChange("otp", e.target.value)}
-                style={styles.input}
+                className={inputBaseClass}
                 maxLength={6}
                 onKeyDown={(e) => e.key === "Enter" && handleVerifyOtp()}
               />
-              {errors.otp && <p style={styles.errorText}>{errors.otp}</p>}
+
+              {errors.otp && (
+                <p className="text-[#ff4d4f] text-xs mt-1.5 ml-1.5">
+                  {errors.otp}
+                </p>
+              )}
+
+              {/* ⏱ COUNTDOWN */}
+              {timeLeft > 0 ? (
+                <p className="text-xs text-gray-500 mt-2 ml-1.5">
+                  OTP hết hạn sau:{" "}
+                  <span className="font-bold">
+                    {Math.floor(timeLeft / 60)}:{timeLeft % 60 < 10 ? "0" : ""}
+                    {timeLeft % 60}
+                  </span>
+                </p>
+              ) : (
+                <p
+                  className="text-red-500 text-xs mt-2 ml-1.5 cursor-pointer hover:underline"
+                  onClick={handleSendOtp}
+                >
+                  OTP đã hết hạn. Gửi lại?
+                </p>
+              )}
             </div>
+
             <button
               onClick={handleVerifyOtp}
-              style={styles.bubbleButton}
-              disabled={loading}
+              disabled={loading || timeLeft <= 0}
+              className="w-full py-[15px] rounded-[30px] bg-[#005ae0] text-white text-base font-bold shadow-[0_10px_20px_rgba(0,90,224,0.2)] hover:bg-[#004bbd] active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {loading ? "Đang kiểm tra..." : "Xác nhận mã"}
             </button>
-            <p style={styles.resendLink} onClick={() => setStep(1)}>
+
+            {/* RESEND */}
+            {cooldowns[email] > 0 ? (
+              <p className="text-gray-400 text-center mt-4">
+                Gửi lại sau {cooldowns[email]}s
+              </p>
+            ) : (
+              <p
+                className="text-[#005ae0] text-center mt-4 cursor-pointer"
+                onClick={handleSendOtp}
+              >
+                Gửi lại OTP
+              </p>
+            )}
+
+            <p
+              className="text-[#005ae0] text-[13px] mt-2 cursor-pointer font-medium hover:underline"
+              onClick={() => setStep(1)}
+            >
               Quay lại nhập Email
             </p>
           </div>
         )}
-
-        {/* STEP 3: THÔNG TIN CÁ NHÂN */}
+        {/* STEP 3: PERSONAL INFO */}
         {step === 3 && (
-          <div style={styles.fadeAnim}>
-            <div style={styles.scrollArea}>
-              <div style={styles.inputGroup}>
-                <label style={styles.inputLabel}>Tên hiển thị</label>
+          <div className="animate-in fade-in duration-500">
+            <div className="max-h-[320px] overflow-y-auto pr-2.5 mb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+              {/* Username */}
+              <div className="text-left mb-[18px]">
+                <label className="block text-[#555] mb-2 text-[13px] font-semibold ml-1.5">
+                  Tên hiển thị
+                </label>
                 <input
                   placeholder="Họ và tên"
                   onChange={(e) => handleChange("username", e.target.value)}
-                  style={styles.input}
+                  className={inputBaseClass}
+                  // Thêm Enter ở đây
+                  onKeyDown={(e) => e.key === "Enter" && handleRegister()}
                 />
                 {errors.username && (
-                  <p style={styles.errorText}>{errors.username}</p>
+                  <p className="text-[#ff4d4f] text-xs mt-1.5 ml-1.5">
+                    {errors.username}
+                  </p>
                 )}
               </div>
 
-              <div style={styles.inputGroup}>
-                <label style={styles.inputLabel}>Số điện thoại</label>
+              {/* Phone */}
+              <div className="text-left mb-[18px]">
+                <label className="block text-[#555] mb-2 text-[13px] font-semibold ml-1.5">
+                  Số điện thoại
+                </label>
                 <input
                   placeholder="09xxxxxxxx"
                   onChange={(e) => handleChange("phone", e.target.value)}
-                  style={styles.input}
+                  className={inputBaseClass}
+                  // Thêm Enter ở đây
+                  onKeyDown={(e) => e.key === "Enter" && handleRegister()}
                 />
-                {errors.phone && <p style={styles.errorText}>{errors.phone}</p>}
+                {errors.phone && (
+                  <p className="text-[#ff4d4f] text-xs mt-1.5 ml-1.5">
+                    {errors.phone}
+                  </p>
+                )}
               </div>
 
-              <div style={styles.inputGroup}>
-                <label style={styles.inputLabel}>Giới tính</label>
+              {/* Gender */}
+              <div className="text-left mb-[18px]">
+                <label className="block text-[#555] mb-2 text-[13px] font-semibold ml-1.5">
+                  Giới tính
+                </label>
                 <select
                   onChange={(e) => handleChange("gender", e.target.value)}
-                  style={styles.input}
+                  className={inputBaseClass}
+                  // Thêm Enter ở đây
+                  onKeyDown={(e) => e.key === "Enter" && handleRegister()}
                 >
                   <option value="">Chọn giới tính</option>
                   <option value="MALE">Nam</option>
                   <option value="FEMALE">Nữ</option>
                 </select>
                 {errors.gender && (
-                  <p style={styles.errorText}>{errors.gender}</p>
+                  <p className="text-[#ff4d4f] text-xs mt-1.5 ml-1.5">
+                    {errors.gender}
+                  </p>
                 )}
               </div>
 
-              <div style={styles.inputGroup}>
-                <label style={styles.inputLabel}>Ngày sinh</label>
+              {/* Birthday */}
+              <div className="text-left mb-[18px]">
+                <label className="block text-[#555] mb-2 text-[13px] font-semibold ml-1.5">
+                  Ngày sinh
+                </label>
                 <input
                   type="date"
                   onChange={(e) => handleChange("birthday", e.target.value)}
-                  style={styles.input}
+                  className={inputBaseClass}
+                  // Thêm Enter ở đây
+                  onKeyDown={(e) => e.key === "Enter" && handleRegister()}
                 />
                 {errors.birthday && (
-                  <p style={styles.errorText}>{errors.birthday}</p>
+                  <p className="text-[#ff4d4f] text-xs mt-1.5 ml-1.5">
+                    {errors.birthday}
+                  </p>
                 )}
               </div>
 
-              <div style={styles.inputGroup}>
-                <label style={styles.inputLabel}>Mật khẩu</label>
-
-                <div style={styles.passwordWrapper}>
+              {/* Password */}
+              <div className="text-left mb-[18px]">
+                <label className="block text-[#555] mb-2 text-[13px] font-semibold ml-1.5">
+                  Mật khẩu
+                </label>
+                <div className="relative flex items-center">
                   <input
-                    type={showPassword ? "text" : "password"} // Thay đổi type dựa trên state
+                    type={showPassword ? "text" : "password"}
                     placeholder="Tối thiểu 6 ký tự"
                     value={password}
                     onChange={(e) => handleChange("password", e.target.value)}
-                    style={styles.inputPassword} // Dùng style có padding-right
+                    className="w-full pl-[18px] pr-12 py-[14px] rounded-[15px] border-none bg-[#f0f2f5] shadow-[inset_4px_4px_8px_#d1d9e6,inset_-4px_-4px_8px_#ffffff] text-[15px] outline-none"
+                    // Thêm Enter ở đây
+                    onKeyDown={(e) => e.key === "Enter" && handleRegister()}
                   />
-
-                  {/* Nút con mắt */}
                   <div
-                    style={styles.eyeIcon}
+                    className="absolute right-4 cursor-pointer p-1 rounded-full hover:bg-gray-200 transition-colors"
                     onClick={() => setShowPassword(!showPassword)}
                   >
                     {showPassword ? (
-                      <EyeOff size={20} color="#888" />
+                      <EyeOff size={20} className="text-[#888]" />
                     ) : (
-                      <Eye size={20} color="#888" />
+                      <Eye size={20} className="text-[#888]" />
                     )}
                   </div>
                 </div>
-
                 {password && (
-                  <div style={styles.strengthWrapper}>
+                  <div className="text-xs mt-1.5 ml-1.5 text-[#555]">
                     Độ mạnh:{" "}
-                    <span style={{ color: strength.color, fontWeight: "bold" }}>
+                    <span className={`${strength.color} font-bold`}>
                       {strength.text}
                     </span>
                   </div>
                 )}
-
                 {errors.password && (
-                  <p style={styles.errorText}>{errors.password}</p>
+                  <p className="text-[#ff4d4f] text-xs mt-1.5 ml-1.5">
+                    {errors.password}
+                  </p>
                 )}
               </div>
             </div>
 
             <button
               onClick={handleRegister}
-              style={styles.bubbleButton}
               disabled={loading || Object.values(errors).some((e) => e)}
+              className="w-full py-[15px] rounded-[30px] bg-[#005ae0] text-white text-base font-bold shadow-[0_10px_20px_rgba(0,90,224,0.2)] hover:bg-[#004bbd] active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-wait"
             >
               {loading ? "Đang xử lý..." : "Hoàn tất đăng ký"}
             </button>
@@ -358,148 +475,5 @@ function RegisterPage() {
     </div>
   );
 }
-
-const styles = {
-  container: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    width: "100vw",
-    height: "100vh",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-    margin: 0,
-    padding: 0,
-    zIndex: 9999,
-  },
-  bubbleCard: {
-    width: "380px",
-    padding: "35px 40px",
-    backgroundColor: "#ffffff",
-    borderRadius: "35px",
-    boxShadow: "20px 20px 60px #d9d9d9, -20px -20px 60px #ffffff",
-    textAlign: "center",
-  },
-  logoWrapper: {
-    display: "flex",
-    justifyContent: "center",
-    marginBottom: "15px",
-  },
-  logoBubble: {
-    width: "60px",
-    height: "60px",
-    borderRadius: "50%",
-    backgroundColor: "#ffffff",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "30px",
-    boxShadow: "inset 6px 6px 12px #d9d9d9, inset -6px -6px 12px #ffffff",
-  },
-  title: {
-    color: "#333",
-    fontSize: "22px",
-    fontWeight: "700",
-    marginBottom: "5px",
-  },
-  subtitle: { color: "#888", fontSize: "14px", marginBottom: "25px" },
-  inputGroup: { textAlign: "left", marginBottom: "18px" },
-  inputLabel: {
-    display: "block",
-    color: "#555",
-    marginBottom: "8px",
-    fontSize: "13px",
-    fontWeight: "600",
-    marginLeft: "5px",
-  },
-  input: {
-    width: "100%",
-    padding: "13px 18px",
-    borderRadius: "15px",
-    border: "none",
-    backgroundColor: "#f0f2f5",
-    boxShadow: "inset 4px 4px 8px #d1d9e6, inset -4px -4px 8px #ffffff",
-    color: "#333",
-    fontSize: "15px",
-    outline: "none",
-    boxSizing: "border-box",
-  },
-  errorText: {
-    color: "#ff4d4f",
-    fontSize: "12px",
-    marginTop: "5px",
-    marginLeft: "5px",
-  },
-  strengthWrapper: {
-    fontSize: "12px",
-    marginTop: "5px",
-    marginLeft: "5px",
-    color: "#555",
-  },
-  bubbleButton: {
-    width: "100%",
-    padding: "15px",
-    borderRadius: "30px",
-    background: "#005ae0",
-    color: "white",
-    border: "none",
-    fontSize: "16px",
-    fontWeight: "bold",
-    boxShadow: "0 10px 20px rgba(0, 90, 224, 0.2)",
-    cursor: "pointer",
-    marginTop: "10px",
-  },
-  scrollArea: {
-    maxHeight: "320px",
-    overflowY: "auto",
-    paddingRight: "10px",
-    marginBottom: "15px",
-    scrollbarWidth: "thin",
-    scrollbarColor: "#d1d9e6 transparent",
-  },
-  resendLink: {
-    color: "#005ae0",
-    fontSize: "13px",
-    marginTop: "15px",
-    cursor: "pointer",
-    fontWeight: "500",
-  },
-  fadeAnim: { animation: "fadeIn 0.5s ease" },
-
-  passwordWrapper: {
-    position: "relative", // Để icon có thể đặt đè lên input
-    display: "flex",
-    alignItems: "center",
-  },
-  inputPassword: {
-    width: "100%",
-    padding: "14px 50px 14px 18px", // Padding phải rộng hơn để không bị chữ đè lên icon
-    borderRadius: "15px",
-    border: "none",
-    background: "#f0f2f5",
-    boxShadow: "inset 4px 4px 8px #d1d9e6, inset -4px -4px 8px #ffffff",
-    fontSize: "15px",
-    boxSizing: "border-box",
-    outline: "none",
-  },
-  eyeIcon: {
-    position: "absolute",
-    right: "15px",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "5px",
-    borderRadius: "50%",
-    transition: "0.2s",
-    // Hiệu ứng nhẹ khi hover
-    ":hover": {
-      backgroundColor: "#e0e0e0",
-    },
-  },
-};
 
 export default RegisterPage;

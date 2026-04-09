@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState,useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Eye, EyeOff } from "lucide-react";
@@ -6,7 +6,7 @@ import {
   forgotPasswordApi,
   resetPasswordApi,
   verifyOtpApi,
-} from "../api/authApi"; 
+} from "../api/authApi";
 
 function ForgotPasswordPage() {
   const navigate = useNavigate();
@@ -20,6 +20,34 @@ function ForgotPasswordPage() {
   const [newPassword, setNewPassword] = useState("");
 
   const [errors, setErrors] = useState({});
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [cooldowns, setCooldowns] = useState({});
+
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCooldowns((prev) => {
+        const updated = { ...prev };
+
+        Object.keys(updated).forEach((key) => {
+          if (updated[key] > 0) updated[key] -= 1;
+        });
+
+        return updated;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   // ================= VALIDATE =================
   const validateEmail = (value) => {
@@ -37,70 +65,66 @@ function ForgotPasswordPage() {
     return "";
   };
 
-  // ================= BƯỚC 1: GỬI OTP =================
+  // ================= HANDLE API =================
   const handleSendOtp = async () => {
     const error = validateEmail(email);
     if (error) return setErrors({ email: error });
 
+    // 🔒 CHỐNG SPAM THEO EMAIL
+    if (cooldowns[email] > 0) {
+      toast.warning(`Email này cần chờ ${cooldowns[email]}s`);
+      return;
+    }
+
     setLoading(true);
     try {
-      // Gọi API quên mật khẩu
       await forgotPasswordApi(email);
+
       setStep(2);
+      setTimeLeft(300);
+
+      // 👇 set cooldown riêng email
+      setCooldowns((prev) => ({
+        ...prev,
+        [email]: 60,
+      }));
+
       setErrors({});
     } catch (err) {
-      // Lấy message lỗi từ backend trả về
-      const msg =
-        err.response?.data?.message || "Email không tồn tại hoặc lỗi hệ thống";
+      const msg = err.response?.data?.message || "Email không tồn tại";
       setErrors({ email: msg });
     } finally {
       setLoading(false);
     }
   };
 
-  // ================= BƯỚC 2: KIỂM TRA OTP TẠI CHỖ =================
   const handleVerifyOtp = async () => {
-    if (!otp) return setErrors({ otp: "Nhập OTP" });
+    if (!otp) return setErrors({ otp: "Vui lòng nhập OTP" });
 
     setLoading(true);
     try {
-      await verifyOtpApi({
-        email,
-        otp,
-      });
-
-      setStep(3); // ✅ chỉ khi OTP đúng mới qua
+      await verifyOtpApi({ email, otp });
+      setStep(3);
       setErrors({});
     } catch (err) {
-      setErrors({
-        otp: err.response?.data || "OTP không đúng",
-      });
+      setErrors({ otp: err.response?.data || "OTP không đúng" });
     } finally {
       setLoading(false);
     }
   };
 
-  // ================= BƯỚC 3: ĐẶT LẠI MẬT KHẨU =================
   const handleReset = async () => {
-    // 🔥 validate trước
     const error = validatePassword(newPassword);
     if (error) return setErrors({ password: error });
 
     setLoading(true);
     try {
-      await resetPasswordApi({
-        email,
-        otp,
-        newPassword,
-      });
-
+      await resetPasswordApi({ email, otp, newPassword });
       toast.success("Đổi mật khẩu thành công 🎉");
       navigate("/login");
     } catch (err) {
       const msg = err.response?.data;
-
-      // 🔥 FIX: phân biệt lỗi OTP vs password
-      if (msg?.toLowerCase().includes("otp")) {
+      if (typeof msg === "string" && msg.toLowerCase().includes("otp")) {
         setErrors({ otp: msg });
       } else {
         setErrors({ password: msg || "Có lỗi xảy ra" });
@@ -110,116 +134,206 @@ function ForgotPasswordPage() {
     }
   };
 
+  const inputBaseClass =
+    "w-full px-[18px] py-[13px] rounded-[15px] border-none bg-[#f0f2f5] shadow-[inset_4px_4px_8px_#d1d9e6,inset_-4px_-4px_8px_#ffffff] text-[#333] text-[15px] outline-none focus:ring-2 focus:ring-[#005ae0]/20 transition-all";
+
+  const buttonClass =
+    "w-full py-[15px] rounded-[30px] bg-[#005ae0] text-white text-base font-bold shadow-[0_10px_20px_rgba(0,90,224,0.2)] hover:bg-[#004bbd] active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-wait mt-4";
+
   return (
-    <div style={styles.container}>
-      <div style={styles.bubbleCard}>
-        <div style={styles.logoWrapper}>
-          <div style={styles.logoBubble}>🔐</div>
+    <div className="fixed inset-0 w-screen h-screen flex justify-center items-center bg-white z-[9999]">
+      <div className="w-[380px] p-10 bg-white rounded-[35px] shadow-[20px_20px_60px_#d9d9d9,-20px_-20px_60px_#ffffff] text-center">
+        {/* LOGO */}
+        <div className="flex justify-center mb-4">
+          <div className="w-[60px] h-[60px] rounded-full bg-white flex items-center justify-center text-3xl shadow-[inset_6px_6px_12px_#d9d9d9,inset_-6px_-6px_12px_#ffffff]">
+            🔐
+          </div>
         </div>
 
-        <h2 style={styles.title}>Quên mật khẩu</h2>
-        <p style={styles.subtitle}>
+        <h2 className="text-[#333] text-[22px] font-bold mb-1.5">
+          Khôi phục mật khẩu
+        </h2>
+        <p className="text-[#888] text-sm mb-[25px]">
           Bước {step} / 3:{" "}
           {step === 1
             ? "Nhập Email"
             : step === 2
-            ? "Nhập OTP"
-            : "Đặt mật khẩu mới"}
+            ? "Xác thực OTP"
+            : "Mật khẩu mới"}
         </p>
 
-        {/* STEP 1: Nhập Email */}
+        {/* STEP 1: NHẬP EMAIL */}
         {step === 1 && (
-          <div style={styles.fadeAnim}>
-            <div style={styles.inputGroup}>
-              <label style={styles.inputLabel}>Email của bạn</label>
+          <div className="animate-in fade-in duration-500">
+            <div className="text-left mb-[18px]">
+              <label className="block text-[#555] mb-2 text-[13px] font-semibold ml-1.5">
+                Email của bạn
+              </label>
+
               <input
+                type="email"
                 placeholder="example@gmail.com"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
                   setErrors({});
                 }}
-                style={styles.input}
+                className={inputBaseClass}
                 onKeyDown={(e) => e.key === "Enter" && handleSendOtp()}
               />
-              {errors.email && <p style={styles.errorText}>{errors.email}</p>}
+
+              {errors.email && (
+                <p className="text-[#ff4d4f] text-xs mt-1.5 ml-1.5">
+                  {errors.email}
+                </p>
+              )}
+
+              {/* 🔒 HIỂN THỊ COOLDOWN */}
+              {cooldowns[email] > 0 && (
+                <p className="text-xs text-gray-400 mt-2 ml-1.5">
+                  Bạn có thể gửi lại sau {cooldowns[email]}s
+                </p>
+              )}
             </div>
+
             <button
               onClick={handleSendOtp}
-              style={styles.bubbleButton}
-              disabled={loading}
+              disabled={loading || cooldowns[email] > 0}
+              className={`${buttonClass} ${
+                cooldowns[email] > 0 ? "opacity-70 cursor-not-allowed" : ""
+              }`}
             >
-              {loading ? "Đang gửi mã..." : "Gửi mã xác nhận"}
+              {loading
+                ? "Đang gửi mã..."
+                : cooldowns[email] > 0
+                ? `Chờ ${cooldowns[email]}s`
+                : "Tiếp theo"}
             </button>
           </div>
         )}
 
-        {/* STEP 2: Nhập OTP */}
+        {/* STEP 2: NHẬP OTP */}
         {step === 2 && (
-          <div style={styles.fadeAnim}>
-            <div style={styles.inputGroup}>
-              <label style={styles.inputLabel}>Nhập mã OTP</label>
+          <div className="animate-in fade-in duration-500">
+            <div className="text-left mb-[18px]">
+              <label className="block text-[#555] mb-2 text-[13px] font-semibold ml-1.5">
+                Mã xác thực (OTP)
+              </label>
+
               <input
-                placeholder="Nhập mã 6 số"
+                placeholder="Nhập 6 số OTP"
                 value={otp}
                 onChange={(e) => {
                   setOtp(e.target.value);
                   setErrors({});
                 }}
-                style={styles.input}
+                className={inputBaseClass}
                 maxLength={6}
+                onKeyDown={(e) => e.key === "Enter" && handleVerifyOtp()}
               />
-              {errors.otp && <p style={styles.errorText}>{errors.otp}</p>}
+
+              {errors.otp && (
+                <p className="text-[#ff4d4f] text-xs mt-1.5 ml-1.5">
+                  {errors.otp}
+                </p>
+              )}
+
+              {/* ⏱ COUNTDOWN OTP */}
+              {timeLeft > 0 ? (
+                <p className="text-xs text-gray-500 mt-2 ml-1.5">
+                  OTP hết hạn sau:{" "}
+                  <span className="font-bold">
+                    {Math.floor(timeLeft / 60)}:{timeLeft % 60 < 10 ? "0" : ""}
+                    {timeLeft % 60}
+                  </span>
+                </p>
+              ) : (
+                <p
+                  className="text-red-500 text-xs mt-2 ml-1.5 cursor-pointer hover:underline"
+                  onClick={() => {
+                    if (cooldowns[email] <= 0) handleSendOtp();
+                  }}
+                >
+                  OTP đã hết hạn. Gửi lại?
+                </p>
+              )}
             </div>
-            <button onClick={handleVerifyOtp} style={styles.bubbleButton}>
-              Tiếp tục
+
+            {/* ✅ NÚT XÁC NHẬN OTP */}
+            <button
+              onClick={handleVerifyOtp}
+              disabled={loading || timeLeft <= 0}
+              className={buttonClass}
+            >
+              {loading ? "Đang kiểm tra..." : "Xác nhận mã"}
             </button>
-            <p style={styles.resendLink} onClick={() => setStep(1)}>
-              Nhập sai Email? Quay lại
+
+            {/* 🔒 RESEND COOLDOWN */}
+            {cooldowns[email] > 0 ? (
+              <p className="text-gray-400 text-center mt-4">
+                Gửi lại sau {cooldowns[email]}s
+              </p>
+            ) : (
+              <p
+                className="text-[#005ae0] text-center mt-4 cursor-pointer hover:underline font-medium"
+                onClick={handleSendOtp}
+              >
+                Gửi lại OTP
+              </p>
+            )}
+
+            {/* BACK */}
+            <p
+              className="text-[#005ae0] text-[13px] mt-2 cursor-pointer font-medium hover:underline"
+              onClick={() => {
+                setStep(1);
+                setErrors({});
+              }}
+            >
+              Quay lại nhập Email
             </p>
           </div>
         )}
 
-        {/* STEP 3: Mật khẩu mới */}
         {step === 3 && (
-          <div style={styles.fadeAnim}>
-            <div style={styles.inputGroup}>
-              <label style={styles.inputLabel}>Mật khẩu mới</label>
-
-              <div style={styles.passwordWrapper}>
+          <div className="animate-in fade-in duration-500">
+            <div className="text-left mb-[18px]">
+              <label className="block text-[#555] mb-2 text-[13px] font-semibold ml-1.5">
+                Mật khẩu mới
+              </label>
+              <div className="relative flex items-center">
                 <input
-                  type={showPassword ? "text" : "password"} // 🔥 Thay đổi type dựa trên state
-                  placeholder="••••••••"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Tối thiểu 6 ký tự"
                   value={newPassword}
                   onChange={(e) => {
                     setNewPassword(e.target.value);
                     setErrors({});
                   }}
-                  style={styles.inputPassword}
+                  className={`${inputBaseClass} pr-12`}
                   onKeyDown={(e) => e.key === "Enter" && handleReset()}
                 />
-
-                {/* 🔥 Nút con mắt */}
                 <div
-                  style={styles.eyeIcon}
+                  className="absolute right-4 cursor-pointer p-1 rounded-full hover:bg-gray-200 transition-colors"
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? (
-                    <EyeOff size={20} color="#888" />
+                    <EyeOff size={20} className="text-[#888]" />
                   ) : (
-                    <Eye size={20} color="#888" />
+                    <Eye size={20} className="text-[#888]" />
                   )}
                 </div>
               </div>
-
               {errors.password && (
-                <p style={styles.errorText}>{errors.password}</p>
+                <p className="text-[#ff4d4f] text-xs mt-1.5 ml-1.5">
+                  {errors.password}
+                </p>
               )}
             </div>
             <button
               onClick={handleReset}
-              style={styles.bubbleButton}
               disabled={loading}
+              className={buttonClass}
             >
               {loading ? "Đang cập nhật..." : "Đổi mật khẩu"}
             </button>
@@ -229,124 +343,5 @@ function ForgotPasswordPage() {
     </div>
   );
 }
-
-const styles = {
-  container: {
-    height: "100vh",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    background: "#ffffff",
-    fontFamily: "'Segoe UI', Roboto, sans-serif",
-  },
-  bubbleCard: {
-    width: "380px",
-    padding: "40px",
-    borderRadius: "35px",
-    backgroundColor: "#ffffff",
-    boxShadow: "20px 20px 60px #d9d9d9, -20px -20px 60px #ffffff",
-    textAlign: "center",
-  },
-  logoWrapper: { marginBottom: "20px" },
-  logoBubble: {
-    width: "65px",
-    height: "65px",
-    borderRadius: "50%",
-    margin: "0 auto",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "28px",
-    backgroundColor: "#ffffff",
-    boxShadow: "inset 6px 6px 12px #d9d9d9, inset -6px -6px 12px #ffffff",
-  },
-  title: {
-    fontSize: "22px",
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: "5px",
-  },
-  subtitle: { fontSize: "14px", color: "#888", marginBottom: "30px" },
-  inputGroup: { textAlign: "left", marginBottom: "15px" },
-  inputLabel: {
-    display: "block",
-    color: "#555",
-    marginBottom: "8px",
-    fontSize: "13px",
-    fontWeight: "600",
-    marginLeft: "5px",
-  },
-  input: {
-    width: "100%",
-    padding: "14px 18px",
-    borderRadius: "15px",
-    border: "none",
-    background: "#f0f2f5",
-    boxShadow: "inset 4px 4px 8px #d1d9e6, inset -4px -4px 8px #ffffff",
-    fontSize: "15px",
-    boxSizing: "border-box",
-    outline: "none",
-  },
-  bubbleButton: {
-    width: "100%",
-    padding: "15px",
-    borderRadius: "30px",
-    background: "#005ae0",
-    color: "#fff",
-    border: "none",
-    marginTop: "15px",
-    cursor: "pointer",
-    fontSize: "16px",
-    fontWeight: "bold",
-    boxShadow: "0 10px 20px rgba(0, 90, 224, 0.2)",
-  },
-  errorText: {
-    color: "#ff4d4f",
-    fontSize: "12px",
-    marginTop: "5px",
-    marginLeft: "5px",
-  },
-  resendLink: {
-    marginTop: "20px",
-    color: "#005ae0",
-    cursor: "pointer",
-    fontSize: "13px",
-    textDecoration: "underline",
-  },
-  fadeAnim: { animation: "fadeIn 0.5s ease" },
-
-  passwordWrapper: {
-    position: "relative", // Để icon có thể đặt đè lên input
-    display: "flex",
-    alignItems: "center",
-  },
-  inputPassword: {
-    width: "100%",
-    padding: "14px 50px 14px 18px", // Padding phải rộng hơn để không bị chữ đè lên icon
-    borderRadius: "15px",
-    border: "none",
-    background: "#f0f2f5",
-    boxShadow: "inset 4px 4px 8px #d1d9e6, inset -4px -4px 8px #ffffff",
-    fontSize: "15px",
-    boxSizing: "border-box",
-    outline: "none",
-  },
-  eyeIcon: {
-    position: "absolute",
-    right: "15px",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "5px",
-    borderRadius: "50%",
-    transition: "0.2s",
-    // Hiệu ứng nhẹ khi hover
-    ":hover": {
-      backgroundColor: "#e0e0e0",
-    },
-  },
-};
-
 
 export default ForgotPasswordPage;

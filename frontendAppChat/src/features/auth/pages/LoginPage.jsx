@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { loginApi } from "../api/authApi";
 import { Eye, EyeOff } from "lucide-react";
 
-export default function Login() {
+function Login() {
   const navigate = useNavigate();
 
   const [phone, setPhone] = useState("");
@@ -11,7 +11,6 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // 🔥 thêm error
   const [errors, setErrors] = useState({
     phone: "",
     password: "",
@@ -30,66 +29,57 @@ export default function Login() {
     }
   }, [navigate]);
 
-  // 🔥 validate
   const validate = () => {
     const newErrors = {
       phone: !phone ? "Vui lòng nhập SĐT" : "",
       password: !password ? "Vui lòng nhập mật khẩu" : "",
     };
-
     setErrors(newErrors);
     return !Object.values(newErrors).some((e) => e);
   };
 
   const handleLogin = async () => {
     if (!validate()) return;
-
     setLoading(true);
-
     try {
-      const res = await loginApi({
-        phone,
-        password,
-      });
-
-      const token = res.data.token;
-      const role = res.data.role;
+      const res = await loginApi({ phone, password });
+      const { token, role } = res.data;
 
       sessionStorage.setItem("token", token);
       sessionStorage.setItem("role", role);
 
-      if (role === "ADMIN") {
-        navigate("/admin");
-      } else {
-        navigate("/chat");
-      }
+      if (role === "ADMIN") navigate("/admin");
+      else navigate("/chat");
     } catch (error) {
-      console.log(error);
-
       const message = error.response?.data || "Sai tài khoản hoặc mật khẩu";
-
-      setErrors((prev) => ({
-        ...prev,
-        password: message, // 👈 show lỗi ở password
-      }));
+      setErrors((prev) => ({ ...prev, password: message }));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.bubbleCard}>
-        <div style={styles.logoWrapper}>
-          <div style={styles.logoBubble}>💬</div>
+    <div className="fixed inset-0 w-screen h-screen flex justify-center items-center bg-white z-[9999]">
+      <div className="w-[370px] p-10 bg-white rounded-[30px] shadow-[0_20px_50px_rgba(0,0,0,0.08),0_5px_15px_rgba(0,0,0,0.04)] text-center">
+        {/* LOGO BUBBLE */}
+        <div className="flex justify-center mb-5">
+          <div className="w-[70px] h-[70px] rounded-full bg-white flex items-center justify-center text-[35px] shadow-[inset_6px_6px_12px_#d9d9d9,inset_-6px_-6px_12px_#ffffff]">
+            💬
+          </div>
         </div>
 
-        <h2 style={styles.title}>Đăng nhập ChatApp</h2>
-        <p style={styles.subtitle}>Cùng kết nối và chia sẻ ngay</p>
+        <h2 className="text-[#333] mb-2 text-2xl font-bold">
+          Đăng nhập ChatApp
+        </h2>
+        <p className="text-[#888] text-[15px] mb-[30px]">
+          Cùng kết nối và chia sẻ ngay
+        </p>
 
-        {/* PHONE */}
-        <div style={styles.inputGroup}>
-          <label style={styles.inputLabel}>Số điện thoại</label>
+        {/* PHONE INPUT */}
+        <div className="text-left mb-[22px]">
+          <label className="block text-[#555] mb-2 text-sm font-medium text-left">
+            Số điện thoại
+          </label>
           <input
             placeholder="09xx..."
             value={phone}
@@ -97,27 +87,29 @@ export default function Login() {
               setPhone(e.target.value);
               setErrors((prev) => ({ ...prev, phone: "" }));
             }}
-            style={styles.input}
+            className="w-full px-4 py-3 rounded-[15px] border-none bg-[#f0f2f5] shadow-[inset_4px_4px_8px_#d1d9e6,inset_-4px_-4px_8px_#ffffff] text-[#333] text-base outline-none focus:ring-2 focus:ring-[#005ae0]/20 transition-all"
             onKeyDown={(e) => e.key === "Enter" && handleLogin()}
           />
           {errors.phone && (
-            <p style={{ color: "red", fontSize: "13px" }}>{errors.phone}</p>
+            <p className="text-red-500 text-[13px] mt-1 ml-1">{errors.phone}</p>
           )}
         </div>
 
-        {/* PASSWORD */}
-        <div style={styles.inputGroup}>
-          <div style={styles.labelHeader}>
-            <label style={styles.inputLabel}>Mật khẩu</label>
+        {/* PASSWORD INPUT */}
+        <div className="text-left mb-[22px]">
+          <div className="flex justify-between items-center mb-2">
+            <label className="text-[#555] text-sm font-medium text-left">
+              Mật khẩu
+            </label>
             <span
               onClick={() => navigate("/forgot-password")}
-              style={{ cursor: "pointer", fontSize: "13px", color: "#005ae0" }}
+              className="cursor-pointer text-[13px] text-[#005ae0] hover:underline"
             >
               Quên?
             </span>
           </div>
 
-          <div style={styles.passwordWrapper}>
+          <div className="relative flex items-center">
             <input
               type={showPassword ? "text" : "password"}
               placeholder="••••••••"
@@ -126,48 +118,49 @@ export default function Login() {
                 setPassword(e.target.value);
                 setErrors((prev) => ({ ...prev, password: "" }));
               }}
-              style={styles.inputPassword} // Dùng style riêng cho input có icon
+              className="w-full pl-4 pr-12 py-3.5 rounded-[15px] border-none bg-[#f0f2f5] shadow-[inset_4px_4px_8px_#d1d9e6,inset_-4px_-4px_8px_#ffffff] text-[15px] outline-none focus:ring-2 focus:ring-[#005ae0]/20 transition-all"
               onKeyDown={(e) => e.key === "Enter" && handleLogin()}
             />
-
-            {/* Icon con mắt */}
             <div
-              style={styles.eyeIcon}
+              className="absolute right-4 cursor-pointer p-1 rounded-full hover:bg-gray-200 transition-colors flex items-center justify-center"
               onClick={() => setShowPassword(!showPassword)}
             >
               {showPassword ? (
-                <EyeOff size={20} color="#888" />
+                <EyeOff size={20} className="text-[#888]" />
               ) : (
-                <Eye size={20} color="#888" />
+                <Eye size={20} className="text-[#888]" />
               )}
             </div>
           </div>
-
           {errors.password && (
-            <p style={{ color: "red", fontSize: "13px", marginTop: "5px" }}>
+            <p className="text-red-500 text-[13px] mt-1.5 ml-1">
               {errors.password}
             </p>
           )}
         </div>
 
         {/* BUTTON */}
-        <div style={styles.btnWrapper}>
+        <div className="flex justify-center mt-[15px]">
           <button
             onClick={handleLogin}
-            style={{
-              ...styles.bubbleButton,
-              opacity: loading ? 0.7 : 1,
-              cursor: loading ? "wait" : "pointer",
-            }}
             disabled={loading}
+            className={`w-full py-3.5 rounded-[30px] bg-[#005ae0] text-white text-[17px] font-bold shadow-[0_10px_20px_rgba(0,90,224,0.2)] transition-all active:scale-[0.98]
+              ${
+                loading
+                  ? "opacity-70 cursor-wait"
+                  : "hover:bg-[#004bbd] cursor-pointer"
+              }`}
           >
             {loading ? "Đang xác thực..." : "Đăng nhập"}
           </button>
         </div>
 
-        <p style={styles.footerText}>
+        <p className="text-[#888] mt-7 text-[15px]">
           Chưa có tài khoản?{" "}
-          <span style={styles.link} onClick={() => navigate("/register")}>
+          <span
+            className="text-[#005ae0] font-bold cursor-pointer hover:underline ml-1"
+            onClick={() => navigate("/register")}
+          >
             Đăng ký ngay
           </span>
         </p>
@@ -175,139 +168,4 @@ export default function Login() {
     </div>
   );
 }
-
-const styles = {
-  container: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    width: "100vw",
-    height: "100vh",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    margin: 0,
-    padding: 0,
-    zIndex: 9999,
-  },
-
-  bubbleCard: {
-    width: "370px",
-    padding: "35px 40px 40px 40px",
-    backgroundColor: "#ffffff",
-    borderRadius: "30px",
-    boxShadow: "0 20px 50px rgba(0,0,0,0.08), 0 5px 15px rgba(0,0,0,0.04)",
-    textAlign: "center",
-  },
-
-  logoWrapper: {
-    display: "flex",
-    justifyContent: "center",
-    marginBottom: "20px",
-  },
-  logoBubble: {
-    width: "70px",
-    height: "70px",
-    borderRadius: "50%",
-    backgroundColor: "#ffffff",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "35px",
-    boxShadow: "inset 6px 6px 12px #d9d9d9, inset -6px -6px 12px #ffffff",
-  },
-
-  title: {
-    color: "#333",
-    marginBottom: "8px",
-    fontSize: "24px",
-    fontWeight: "700",
-  },
-  subtitle: { color: "#888", fontSize: "15px", marginBottom: "30px" },
-
-  inputGroup: { textAlign: "left", marginBottom: "22px" },
-  inputLabel: {
-    display: "block",
-    color: "#555",
-    marginBottom: "8px",
-    fontSize: "14px",
-    fontWeight: "500",
-  },
-  labelHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  forgot: {
-    color: "#005ae0",
-    fontSize: "13px",
-    cursor: "pointer",
-    marginBottom: "8px",
-  },
-  input: {
-    width: "100%",
-    padding: "12px 16px",
-    borderRadius: "15px",
-    border: "none",
-    backgroundColor: "#f0f2f5",
-    boxShadow: "inset 4px 4px 8px #d1d9e6, inset -4px -4px 8px #ffffff",
-    color: "#333",
-    fontSize: "16px",
-    outline: "none",
-    boxSizing: "border-box",
-  },
-
-  btnWrapper: {
-    display: "flex",
-    justifyContent: "center",
-    marginTop: "15px",
-  },
-  bubbleButton: {
-    width: "100%",
-    padding: "14px",
-    borderRadius: "30px",
-    background: "#005ae0",
-    color: "white",
-    border: "none",
-    fontSize: "17px",
-    fontWeight: "bold",
-    boxShadow: "0 10px 20px rgba(0, 90, 224, 0.2)",
-    cursor: "pointer",
-  },
-
-  footerText: { color: "#888", marginTop: "28px", fontSize: "15px" },
-  link: { color: "#005ae0", fontWeight: "bold", cursor: "pointer" },
-
-  passwordWrapper: {
-    position: "relative", // Để icon có thể đặt đè lên input
-    display: "flex",
-    alignItems: "center",
-  },
-  inputPassword: {
-    width: "100%",
-    padding: "14px 50px 14px 18px", // Padding phải rộng hơn để không bị chữ đè lên icon
-    borderRadius: "15px",
-    border: "none",
-    background: "#f0f2f5",
-    boxShadow: "inset 4px 4px 8px #d1d9e6, inset -4px -4px 8px #ffffff",
-    fontSize: "15px",
-    boxSizing: "border-box",
-    outline: "none",
-  },
-  eyeIcon: {
-    position: "absolute",
-    right: "15px",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "5px",
-    borderRadius: "50%",
-    transition: "0.2s",
-    // Hiệu ứng nhẹ khi hover
-    ":hover": {
-      backgroundColor: "#e0e0e0",
-    }
-  },
-};
+export default Login

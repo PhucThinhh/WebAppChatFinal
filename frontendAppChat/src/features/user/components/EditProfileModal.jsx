@@ -5,20 +5,19 @@ function EditProfileModal({ user, onClose, onSuccess }) {
   const [name, setName] = useState(user.username || "");
   const [gender, setGender] = useState(user.gender || "MALE");
 
-  // ====== ĐỒNG BỘ NGÀY SINH TỪ USER ======
- const getDate = () => {
-   const date = user?.birthday || user?.dob;
-   if (!date) return { y: "2000", m: "01", d: "01" };
+  // ====== ĐỒNG BỘ NGÀY SINH ======
+  const getDate = () => {
+    const date = user?.birthday || user?.dob;
+    if (!date) return { y: "2000", m: "01", d: "01" };
+    const [y, m, d] = date.split("-");
+    return { y, m, d };
+  };
 
-   const [y, m, d] = date.split("-");
-   return { y, m, d };
- };
+  const { y, m, d } = getDate();
+  const [year, setYear] = useState(y);
+  const [month, setMonth] = useState(m);
+  const [day, setDay] = useState(d);
 
- const { y, m, d } = getDate();
-
- const [year, setYear] = useState(y);
- const [month, setMonth] = useState(m);
- const [day, setDay] = useState(d);
   const handleSubmit = async () => {
     const birthday = `${year}-${month}-${day}`;
     try {
@@ -35,101 +34,103 @@ function EditProfileModal({ user, onClose, onSuccess }) {
   };
 
   return (
-    <div style={styles.overlay}>
-      <div style={styles.modal}>
+    <div className="fixed inset-0 bg-black/80 flex justify-center items-center z-[2500]">
+      <div className="w-[420px] bg-[#242526] rounded-xl text-white overflow-hidden shadow-[0_12px_28px_rgba(0,0,0,0.5)]">
+        
         {/* HEADER */}
-        <div style={styles.header}>
-          <div style={styles.headerLeft}>
-            <span style={styles.backBtn}>‹</span>
-            <h3 style={styles.headerTitle}>Cập nhật thông tin cá nhân</h3>
+        <div className="p-4 flex justify-between items-center border-b border-[#3e4042]">
+          <div className="flex items-center gap-2.5">
+            <span className="text-3xl cursor-pointer text-[#b0b3b8] leading-none">‹</span>
+            <h3 className="text-base font-semibold">Cập nhật thông tin cá nhân</h3>
           </div>
-          <span style={styles.closeBtn} onClick={onClose}>
+          <span 
+            className="cursor-pointer text-[#b0b3b8] text-lg hover:text-white transition-colors" 
+            onClick={onClose}
+          >
             ✖
           </span>
         </div>
 
-        <div style={styles.body}>
+        <div className="p-5">
           {/* TÊN HIỂN THỊ */}
-          <div style={styles.section}>
-            <label style={styles.label}>Tên hiển thị</label>
+          <div className="mb-6">
+            <label className="block text-sm text-[#e4e6eb] mb-2">Tên hiển thị</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              style={styles.input}
+              className="w-full px-3 py-2.5 bg-transparent border border-[#4e4f50] rounded-md text-white text-[15px] outline-none focus:border-[#005ae0] transition-colors"
               placeholder="Nhập tên hiển thị"
             />
           </div>
 
           {/* THÔNG TIN CÁ NHÂN */}
-          <div style={styles.section}>
-            <h4 style={styles.sectionTitle}>Thông tin cá nhân</h4>
-            <div style={styles.genderRow}>
-              <label style={styles.radioLabel}>
+          <div className="mb-6">
+            <h4 className="text-[15px] font-semibold mb-4">Thông tin cá nhân</h4>
+            <div className="flex gap-8">
+              <label className="flex items-center gap-2 cursor-pointer text-[15px]">
                 <input
                   type="radio"
                   name="gender"
                   checked={gender === "MALE"}
                   onChange={() => setGender("MALE")}
-                  style={styles.radioInput}
+                  className="w-[18px] height-[18px] accent-[#005ae0]"
                 />
-                <span style={styles.radioDot}></span>
                 Nam
               </label>
 
-              <label style={styles.radioLabel}>
+              <label className="flex items-center gap-2 cursor-pointer text-[15px]">
                 <input
                   type="radio"
                   name="gender"
                   checked={gender === "FEMALE"}
                   onChange={() => setGender("FEMALE")}
-                  style={styles.radioInput}
+                  className="w-[18px] height-[18px] accent-[#005ae0]"
                 />
-                <span style={styles.radioDot}></span>
                 Nữ
               </label>
             </div>
           </div>
 
           {/* NGÀY SINH */}
-          <div style={styles.section}>
-            <label style={styles.label}>Ngày sinh</label>
-            <div style={styles.dateGrid}>
+          <div className="mb-6">
+            <label className="block text-sm text-[#e4e6eb] mb-2">Ngày sinh</label>
+            <div className="grid grid-cols-[1fr_1fr_1.2fr] gap-2.5">
               <select
-                style={styles.select}
+                className="p-2.5 bg-transparent border border-[#4e4f50] rounded-md text-white cursor-pointer outline-none focus:border-[#005ae0]"
                 value={day}
                 onChange={(e) => setDay(e.target.value)}
               >
                 {Array.from({ length: 31 }, (_, i) =>
                   String(i + 1).padStart(2, "0")
-                ).map((d) => (
-                  <option key={d} value={d}>
-                    {d}
+                ).map((val) => (
+                  <option key={val} value={val} className="bg-[#242526]">
+                    {val}
                   </option>
                 ))}
               </select>
 
               <select
-                style={styles.select}
+                className="p-2.5 bg-transparent border border-[#4e4f50] rounded-md text-white cursor-pointer outline-none focus:border-[#005ae0]"
                 value={month}
                 onChange={(e) => setMonth(e.target.value)}
               >
                 {Array.from({ length: 12 }, (_, i) =>
                   String(i + 1).padStart(2, "0")
-                ).map((m) => (
-                  <option key={m} value={m}>
-                    {m}
+                ).map((val) => (
+                  <option key={val} value={val} className="bg-[#242526]">
+                    {val}
                   </option>
                 ))}
               </select>
 
               <select
-                style={styles.select}
+                className="p-2.5 bg-transparent border border-[#4e4f50] rounded-md text-white cursor-pointer outline-none focus:border-[#005ae0]"
                 value={year}
                 onChange={(e) => setYear(e.target.value)}
               >
-                {Array.from({ length: 100 }, (_, i) => 2026 - i).map((y) => (
-                  <option key={y} value={y}>
-                    {y}
+                {Array.from({ length: 100 }, (_, i) => 2026 - i).map((val) => (
+                  <option key={val} value={val} className="bg-[#242526]">
+                    {val}
                   </option>
                 ))}
               </select>
@@ -138,11 +139,17 @@ function EditProfileModal({ user, onClose, onSuccess }) {
         </div>
 
         {/* FOOTER */}
-        <div style={styles.footer}>
-          <button onClick={onClose} style={styles.btnCancel}>
+        <div className="p-4 flex justify-end gap-3 border-t border-[#3e4042]">
+          <button 
+            onClick={onClose} 
+            className="px-6 py-2.5 bg-[#3a3b3c] hover:bg-[#4e4f50] text-[#e4e6eb] rounded-md font-semibold transition-colors"
+          >
             Hủy
           </button>
-          <button onClick={handleSubmit} style={styles.btnSubmit}>
+          <button 
+            onClick={handleSubmit} 
+            className="px-6 py-2.5 bg-[#005ae0] hover:bg-[#0064f0] text-white rounded-md font-semibold transition-colors"
+          >
             Cập nhật
           </button>
         </div>
@@ -150,119 +157,5 @@ function EditProfileModal({ user, onClose, onSuccess }) {
     </div>
   );
 }
-
-const styles = {
-  overlay: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.8)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 2500,
-  },
-  modal: {
-    width: "420px",
-    background: "#242526",
-    borderRadius: "12px",
-    color: "#fff",
-    overflow: "hidden",
-    boxShadow: "0 12px 28px rgba(0,0,0,0.5)",
-  },
-  header: {
-    padding: "16px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderBottom: "1px solid #3e4042",
-  },
-  headerLeft: { display: "flex", alignItems: "center", gap: "10px" },
-  backBtn: {
-    fontSize: "28px",
-    cursor: "pointer",
-    color: "#b0b3b8",
-    lineHeight: "1",
-  },
-  headerTitle: { fontSize: "16px", fontWeight: "600", margin: 0 },
-  closeBtn: { cursor: "pointer", color: "#b0b3b8", fontSize: "18px" },
-
-  body: { padding: "20px" },
-  section: { marginBottom: "24px" },
-  label: {
-    display: "block",
-    fontSize: "14px",
-    color: "#e4e6eb",
-    marginBottom: "8px",
-  },
-  sectionTitle: {
-    fontSize: "15px",
-    fontWeight: "600",
-    marginBottom: "15px",
-    color: "#fff",
-  },
-
-  input: {
-    width: "100%",
-    padding: "10px 12px",
-    background: "transparent",
-    border: "1px solid #4e4f50",
-    borderRadius: "6px",
-    color: "#fff",
-    fontSize: "15px",
-    outline: "none",
-    boxSizing: "border-box",
-  },
-
-  genderRow: { display: "flex", gap: "30px" },
-  radioLabel: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    cursor: "pointer",
-    fontSize: "15px",
-  },
-  radioInput: { width: "18px", height: "18px", accentColor: "#005ae0" },
-
-  dateGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr 1.2fr",
-    gap: "10px",
-  },
-  select: {
-    padding: "10px",
-    background: "transparent",
-    border: "1px solid #4e4f50",
-    borderRadius: "6px",
-    color: "#fff",
-    cursor: "pointer",
-    outline: "none",
-  },
-
-  footer: {
-    padding: "16px",
-    display: "flex",
-    justifyContent: "flex-end",
-    gap: "12px",
-    borderTop: "1px solid #3e4042",
-  },
-  btnCancel: {
-    padding: "10px 24px",
-    background: "#3a3b3c",
-    color: "#e4e6eb",
-    border: "none",
-    borderRadius: "6px",
-    fontWeight: "600",
-    cursor: "pointer",
-  },
-  btnSubmit: {
-    padding: "10px 24px",
-    background: "#005ae0",
-    color: "#fff",
-    border: "none",
-    borderRadius: "6px",
-    fontWeight: "600",
-    cursor: "pointer",
-  },
-};
 
 export default EditProfileModal;

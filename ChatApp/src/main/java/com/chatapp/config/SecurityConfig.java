@@ -26,11 +26,16 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
+                        .requestMatchers("/ws/**").permitAll()   // ⭐ THÊM DÒNG NÀY
+
                         // 🔥 ADMIN ONLY
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
                         // 🔥 USER + ADMIN
                         .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
+
+                        .requestMatchers("/api/chat/**").authenticated()
+
 
                         // 🔐 còn lại
                         .anyRequest().authenticated()

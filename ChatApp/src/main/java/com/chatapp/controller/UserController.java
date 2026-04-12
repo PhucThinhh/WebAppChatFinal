@@ -88,6 +88,7 @@ public class UserController {
 
     private UserResponse map(User user) {
         return UserResponse.builder()
+                .id(user.getId())
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .phone(user.getPhone())

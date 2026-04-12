@@ -7,7 +7,10 @@ function useUser() {
   const fetchUser = async () => {
     try {
       const res = await getMeApi();
-      setUser(res.data);
+
+      const userData = res.data?.data || res.data?.user || res.data;
+
+      setUser(userData);
     } catch (err) {
       console.log(err);
     }
@@ -15,11 +18,22 @@ function useUser() {
 
   useEffect(() => {
     const load = async () => {
-      await fetchUser();
+      try {
+        const res = await getMeApi();
+
+        const userData = res.data?.data || res.data?.user || res.data;
+
+        setUser(userData);
+      } catch (err) {
+        console.log(err);
+      }
     };
+
     load();
   }, []);
 
+
   return { user, fetchUser };
 }
-export default useUser
+
+export default useUser;

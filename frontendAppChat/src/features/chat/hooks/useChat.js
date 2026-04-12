@@ -1,47 +1,49 @@
 import { useState, useRef, useEffect } from "react";
 
 function useChat() {
-  const [messages, setMessages] = useState([
-    {
-      text: "console.log('server running localhost http://localhost:3000/')",
-      sender: "me",
-      time: "08:40",
-    },
-    {
-      text: "Giao diện này nhìn ổn chưa bạn?",
-      sender: "other",
-      time: "08:42",
-    },
-  ]);
-
+  const [messages, setMessages] = useState([]); // ❌ bỏ message fake Hello
   const [input, setInput] = useState("");
-  const messagesEndRef = useRef();
+  const messagesEndRef = useRef(null);
 
-  const sendMessage = () => {
-    if (!input.trim()) return;
+  // ================= ADD MESSAGE =================
+  const addMessage = (message) => {
+    setMessages((prev) => [...prev, message]);
+  };
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        text: input,
-        sender: "me",
-        time: new Date().toLocaleTimeString().slice(0, 5),
-      },
-    ]);
+  // ================= SET MESSAGES (LOAD HISTORY) =================
+  const replaceMessages = (list) => {
+    setMessages(list);
+  };
 
+  // ================= SEND MESSAGE LOCAL (optional) =================
+  const sendMessageLocal = (text) => {
+    if (!text.trim()) return;
+
+    const msg = {
+      text,
+      sender: "me",
+      time: new Date().toLocaleTimeString().slice(0, 5),
+    };
+
+    setMessages((prev) => [...prev, msg]);
     setInput("");
   };
 
+  // ================= AUTO SCROLL =================
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   return {
     messages,
+    setMessages, // 🔥 QUAN TRỌNG (load history)
+    addMessage,
+    replaceMessages, // optional
     input,
     setInput,
-    sendMessage,
+    sendMessageLocal,
     messagesEndRef,
   };
 }
-export default useChat
+
+export default useChat;

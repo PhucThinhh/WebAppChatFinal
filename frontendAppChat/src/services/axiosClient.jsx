@@ -4,9 +4,9 @@ const axiosClient = axios.create({
   baseURL: "http://localhost:8080/api",
 });
 
-// 👉 REQUEST: gắn token (theo từng tab)
+// 👉 REQUEST: gắn token từ localStorage
 axiosClient.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem("token");
+  const token = localStorage.getItem("token");
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -15,15 +15,12 @@ axiosClient.interceptors.request.use((config) => {
   return config;
 });
 
-// 👉 RESPONSE: xử lý lỗi
+// 👉 RESPONSE: xử lý lỗi 401
 axiosClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // ❌ chỉ logout tab hiện tại
-      sessionStorage.clear();
-
-      // redirect về login
+      localStorage.removeItem("token");
       window.location.href = "/";
     }
 

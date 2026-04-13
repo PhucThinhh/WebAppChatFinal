@@ -15,4 +15,5 @@ public class ChatMessageResponseDTO {
     private String type;
     private String fileUrl;
     private LocalDateTime createdAt;
+
 }

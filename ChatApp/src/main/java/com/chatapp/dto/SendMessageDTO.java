@@ -10,5 +10,9 @@ public class SendMessageDTO {
     private String type;
     private String fileUrl;
     private String roomId;
+    private Long originalSenderId;
+    private String originalContent;
+    private String originalMessageId;
+
 
 }

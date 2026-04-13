@@ -1,21 +1,35 @@
 import { useState, useRef, useEffect } from "react";
 
 function useChat() {
-  const [messages, setMessages] = useState([]); // ❌ bỏ message fake Hello
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const messagesEndRef = useRef(null);
+
+  // ================= HELPER =================
+  const getId = (m) => m._id || m.id;
 
   // ================= ADD MESSAGE =================
   const addMessage = (message) => {
     setMessages((prev) => [...prev, message]);
   };
 
-  // ================= SET MESSAGES (LOAD HISTORY) =================
+  // ================= LOAD HISTORY =================
   const replaceMessages = (list) => {
     setMessages(list);
   };
 
-  // ================= SEND MESSAGE LOCAL (optional) =================
+  // ================= DELETE MESSAGE (🔥 QUAN TRỌNG) =================
+  const deleteMessage = (messageId, userId) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        getId(m) === messageId
+          ? { ...m, deletedBy: userId } // 👈 gắn người xoá
+          : m
+      )
+    );
+  };
+
+  // ================= SEND MESSAGE LOCAL =================
   const sendMessageLocal = (text) => {
     if (!text.trim()) return;
 
@@ -36,9 +50,10 @@ function useChat() {
 
   return {
     messages,
-    setMessages, // 🔥 QUAN TRỌNG (load history)
+    setMessages,
     addMessage,
-    replaceMessages, // optional
+    replaceMessages,
+    deleteMessage, // 👈 thêm cái này
     input,
     setInput,
     sendMessageLocal,

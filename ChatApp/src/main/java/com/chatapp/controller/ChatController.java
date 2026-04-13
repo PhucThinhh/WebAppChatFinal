@@ -2,15 +2,14 @@ package com.chatapp.controller;
 
 import com.chatapp.dto.SendMessageDTO;
 import com.chatapp.entity.Message;
+import com.chatapp.entity.User;
+import com.chatapp.repository.UserRepository;
 import com.chatapp.service.ChatService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.handler.annotation.MessageMapping;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.List;
 
 @RestController
@@ -19,21 +18,58 @@ import java.util.List;
 public class ChatController {
 
     private final ChatService chatService;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final UserRepository userRepository;
 
+    // =========================
+    // SEND MESSAGE (SOCKET)
+    // =========================
     @MessageMapping("/chat.send")
     public void send(SendMessageDTO dto) {
 
-        Message saved = chatService.sendMessage(dto);
+        Message message = chatService.sendMessage(dto);
 
-        messagingTemplate.convertAndSend(
-                "/topic/chat/" + saved.getRoomId(),
-                saved
-        );
+        if (message == null) {
+            return; // ❌ STOP hoàn toàn nếu bị block
+        }
     }
 
-    @GetMapping("/messages/{roomId}")
-    public List<Message> getMessages(@PathVariable String roomId) {
-        return chatService.getMessages(roomId);
+    // =========================
+    // GET MESSAGES
+    // =========================
+    @GetMapping("/messages/{roomId}") public List<Message> getMessages( @PathVariable String roomId, Principal principal) { Long userId = Long.parseLong(principal.getName()); return chatService.getMessages(roomId, userId); }
+
+    // =========================
+    // DELETE FOR ME
+    // =========================
+    @DeleteMapping("/message/{id}")
+    public void deleteMessage(
+            @PathVariable String id,
+            Principal principal) {
+
+        System.out.println("PRINCIPAL: " + principal.getName());
+
+        User user = userRepository.findByPhone(principal.getName())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Long userId = user.getId();
+
+        chatService.deleteForMe(id, userId);
+    }
+    // =========================
+    // RECALL MESSAGE
+    // =========================
+    @PutMapping("/message/recall/{id}")
+    public void recallMessage(@PathVariable String id) {
+        chatService.recallMessage(id); // 🔥 service send socket
+    }
+
+    @DeleteMapping("/conversation/{roomId}")
+    public void deleteConversation(
+            @PathVariable String roomId,
+            Principal principal) {
+
+        Long userId = Long.parseLong(principal.getName());
+
+        chatService.deleteConversationForMe(roomId, userId);
     }
 }

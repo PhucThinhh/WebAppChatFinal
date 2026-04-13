@@ -20,6 +20,10 @@ public class SecurityConfig {
         http
                 .cors(cors -> {})
                 .csrf(csrf -> csrf.disable())
+
+                .headers(headers -> headers
+                        .frameOptions(frame -> frame.disable()) // ✅ cho phép iframe
+                )
                 .authorizeHttpRequests(auth -> auth
 
                         // 🔓 public
@@ -35,6 +39,12 @@ public class SecurityConfig {
                         .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
 
                         .requestMatchers("/api/chat/**").authenticated()
+
+                        .requestMatchers("/uploads/**").permitAll()
+
+
+
+
 
 
                         // 🔐 còn lại

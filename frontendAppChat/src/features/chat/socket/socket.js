@@ -2,19 +2,24 @@ import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
 let stompClient = null;
-
-// ================= STATE =================
 let connectionState = "DISCONNECTED";
 
-// chat rooms
 let activeRooms = {};
 let pendingRooms = {};
-
-// online status subscription
 let statusSubscription = null;
+
+// ================= GLOBAL LOGOUT =================
+window.addEventListener("storage", (event) => {
+  if (event.key === "token" && !event.newValue) {
+    disconnectSocket();
+  }
+});
 
 // ================= CONNECT =================
 export const connectSocket = (userId, onReady) => {
+  const token = localStorage.getItem("token");
+  if (!token) return;
+
   if (stompClient) return;
 
   stompClient = new Client({
@@ -30,18 +35,24 @@ export const connectSocket = (userId, onReady) => {
 
       connectionState = "CONNECTED";
 
-      // ================= restore rooms =================
+      // restore active rooms
       Object.entries(activeRooms).forEach(([roomId, cb]) => {
-        internalJoinRoom(roomId, cb);
+        internalJoinRoom(
+          roomId,
+          cb.callback,
+          cb.deleteCallback,
+          cb.recallCallback
+        );
       });
 
+      // restore pending rooms
       Object.entries(pendingRooms).forEach(([roomId, cb]) => {
-        internalJoinRoom(roomId, cb);
+        internalJoinRoom(roomId, cb.onMessage, cb.onDelete, cb.onRecall);
       });
 
       pendingRooms = {};
 
-      // ================= ONLINE/OFFLINE =================
+      // online status
       if (!statusSubscription) {
         statusSubscription = stompClient.subscribe(
           "/topic/users/status",
@@ -69,54 +80,97 @@ export const connectSocket = (userId, onReady) => {
 };
 
 // ================= INTERNAL JOIN ROOM =================
-const internalJoinRoom = (roomId, onMessage) => {
+const internalJoinRoom = (roomId, onMessage, onDelete, onRecall) => {
   if (!stompClient) return;
 
-  if (activeRooms[roomId]) return;
+  const existing = activeRooms[roomId];
+  if (existing) {
+    existing.messageSub?.unsubscribe();
+    existing.deleteSub?.unsubscribe();
+    existing.recallSub?.unsubscribe();
+    delete activeRooms[roomId];
+  }
 
-  const subscription = stompClient.subscribe(`/topic/chat/${roomId}`, (msg) => {
+  // ================= MESSAGE =================
+  const messageSub = stompClient.subscribe(`/topic/chat/${roomId}`, (msg) => {
     try {
       const data = JSON.parse(msg.body);
       onMessage?.(data);
     } catch (err) {
-      console.error("Parse error:", err);
+      console.error("Parse message error:", err);
     }
   });
 
+  // ================= DELETE =================
+  const deleteSub = stompClient.subscribe(
+    `/topic/chat/${roomId}/delete`,
+    (msg) => {
+      try {
+        const deletedId = msg.body;
+        console.log("🗑 DELETE ID:", deletedId);
+        onDelete?.(deletedId);
+      } catch (err) {
+        console.error("Parse delete error:", err);
+      }
+    }
+  );
+
+  // ================= RECALL =================
+  const recallSub = stompClient.subscribe(
+    `/topic/chat/${roomId}/recall`,
+    (msg) => {
+      try {
+        const recallId = msg.body;
+        console.log("♻️ RECALL ID:", recallId);
+        onRecall?.(recallId);
+      } catch (err) {
+        console.error("Parse recall error:", err);
+      }
+    }
+  );
+
   activeRooms[roomId] = {
-    subscription,
+    messageSub,
+    deleteSub,
+    recallSub,
     callback: onMessage,
+    deleteCallback: onDelete,
+    recallCallback: onRecall,
   };
 
   console.log("📌 Joined room:", roomId);
 };
 
 // ================= JOIN ROOM =================
-export const joinRoom = (roomId, onMessage) => {
+export const joinRoom = (roomId, onMessage, onDelete, onRecall) => {
   if (!stompClient) return;
 
   if (connectionState !== "CONNECTED") {
-    pendingRooms[roomId] = onMessage;
+    pendingRooms[roomId] = { onMessage, onDelete, onRecall };
     return;
   }
 
-  internalJoinRoom(roomId, onMessage);
-
-  return activeRooms[roomId]?.subscription;
+  internalJoinRoom(roomId, onMessage, onDelete, onRecall);
 };
 
 // ================= LEAVE ROOM =================
 export const leaveRoom = (roomId) => {
   if (activeRooms[roomId]) {
-    activeRooms[roomId].subscription?.unsubscribe();
+    activeRooms[roomId].messageSub?.unsubscribe();
+    activeRooms[roomId].deleteSub?.unsubscribe();
+    activeRooms[roomId].recallSub?.unsubscribe();
+
     delete activeRooms[roomId];
+
     console.log("🚪 Left room:", roomId);
   }
 };
 
 // ================= SEND MESSAGE =================
 export const sendMessageSocket = (message) => {
-  if (connectionState !== "CONNECTED" || !stompClient) {
+  const token = localStorage.getItem("token");
+
+  if (!token || connectionState !== "CONNECTED" || !stompClient) {
     console.log("BLOCK SEND - socket not ready");
     return;
   }
@@ -148,7 +202,6 @@ export const disconnectSocket = () => {
 
   activeRooms = {};
   pendingRooms = {};
-
   statusSubscription = null;
 
   console.log("❌ SOCKET DISCONNECTED");

@@ -5,7 +5,8 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 
 import java.util.List;
 
-public interface MessageRepository extends MongoRepository<com.chatapp.entity.Message, String> {
+public interface MessageRepository extends MongoRepository<Message, String>
+{
 
     List<com.chatapp.entity.Message> findBySenderIdAndReceiverIdOrReceiverIdAndSenderId(
             Long senderId1, Long receiverId1,
@@ -13,5 +14,7 @@ public interface MessageRepository extends MongoRepository<com.chatapp.entity.Me
     );
 
     List<Message> findByRoomIdOrderByCreatedAtAsc(String roomId);
+
+
 
 }

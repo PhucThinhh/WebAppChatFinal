@@ -45,8 +45,12 @@ function ChangePasswordModal({ onClose }) {
     try {
       await changePasswordApi({ oldPassword, newPassword });
       toast.success("Đổi mật khẩu thành công! Vui lòng đăng nhập lại");
-      sessionStorage.removeItem("token");
-      sessionStorage.removeItem("role");
+      localStorage.removeItem("token");
+      localStorage.removeItem("role");
+
+      // 🔥 sync logout all tabs
+      window.dispatchEvent(new Event("storage"));
+
       setTimeout(() => {
         navigate("/login", { replace: true });
       }, 1500);

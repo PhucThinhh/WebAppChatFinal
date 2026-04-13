@@ -39,4 +39,14 @@ public class Message {
 
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    private Long deletedBy;
+
+    private Long originalSenderId;
+
+    private String originalContent;
+
+    private String originalMessageId;
+
+
 }

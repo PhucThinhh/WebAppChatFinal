@@ -15,12 +15,16 @@ import useUser from "../hooks/useUser";
 import ProfileModal from "../../user/components/ProfileModal";
 import ChangePasswordModal from "../../user/components/ChangePasswordModal";
 
-import { disconnectSocket, joinRoom } from "../socket/socket";
+import {
+  disconnectSocket,
+  joinRoom,
+  subscribeOnlineList,
+} from "../socket/socket";
 
 import {
   deleteConversationApi,
   blockUserApi,
-  checkBlockApi,
+  getBlockStatusApi,
   unblockUserApi,
 } from "../api/chatApi";
 
@@ -55,8 +59,10 @@ function ChatPage() {
   const [forwardMessage, setForwardMessage] = useState(null);
   const [showForwardModal, setShowForwardModal] = useState(false);
 
-  const [isBlocked, setIsBlocked] = useState(false);
-
+const [blockStatus, setBlockStatus] = useState({
+  blockedByMe: false,
+  blockedByOther: false,
+});
   const handleForwardClick = (msg) => {
     setForwardMessage(msg);
     setShowForwardModal(true);
@@ -88,34 +94,48 @@ function ChatPage() {
     setForwardMessage(null);
   };
 
+  
+
   // ================= SOCKET CONNECT =================
   useEffect(() => {
     if (!user?.id) return;
 
-    // connect socket
+    let statusSub = null;
+    let listSub = null;
+
     connectSocket(user.id, () => {
-      console.log("✅ SOCKET READY");
-    });
+      // 🔥 1. sync toàn bộ user online
+      listSub = subscribeOnlineList((list) => {
+        console.log("👥 LIST:", list);
 
-    // subscribe online status
-    const unsubscribe = subscribeUserStatus((data) => {
-      console.log("👤 STATUS:", data);
+        const newSet = new Set(list.map((id) => Number(id)));
+        setOnlineUsers(newSet);
+      });
 
-      setOnlineUsers((prev) => {
-        const newSet = new Set(prev);
+      // 🔥 2. realtime update
+      statusSub = subscribeUserStatus((data) => {
+        console.log("🔥 STATUS:", data);
 
-        if (data.status === "ONLINE") {
-          newSet.add(String(data.userId));
-        } else {
-          newSet.delete(String(data.userId));
-        }
+        setOnlineUsers((prev) => {
+          const newSet = new Set(prev);
 
-        return newSet;
+          const userId = Number(data.userId);
+
+          if (data.status === "ONLINE") {
+            newSet.add(userId);
+          } else {
+            newSet.delete(userId);
+          }
+
+          return newSet;
+        });
       });
     });
 
+    // 🔥 cleanup ĐÚNG CHỖ
     return () => {
-      unsubscribe?.();
+      statusSub?.unsubscribe();
+      listSub?.unsubscribe();
     };
   }, [user?.id]);
 
@@ -263,8 +283,8 @@ function ChatPage() {
   }, [roomId, currentUserId]);
 
   const handleSendMessage = () => {
-    if (isBlocked) {
-      alert("Bạn đã chặn người này");
+    if (blockStatus.blockedByMe || blockStatus.blockedByOther) {
+      alert("Không thể gửi tin nhắn");
       return;
     }
 
@@ -284,7 +304,7 @@ function ChatPage() {
   };
 
   const handleSendFile = (fileUrl) => {
-    if (isBlocked) {
+    if (blockStatus.blockedByMe || blockStatus.blockedByOther) { 
       alert("Bạn đã chặn người này");
       return;
     }
@@ -315,8 +335,12 @@ function ChatPage() {
 
     // 🔥 CHECK BLOCK
     try {
-      const res = await checkBlockApi(userId);
-      setIsBlocked(res.data); // true/false
+      const res = await getBlockStatusApi(userId);
+
+      setBlockStatus({
+        blockedByMe: res.data?.blockedByMe ?? false,
+        blockedByOther: res.data?.blockedByOther ?? false,
+      });
     } catch (err) {
       console.log("Check block lỗi", err);
     }
@@ -381,7 +405,7 @@ function ChatPage() {
                     />
                     <span
                       className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-slate-800 ${
-                        onlineUsers.has(String(selectedUser.id))
+                        onlineUsers.has(Number(selectedUser.id))
                           ? "bg-emerald-500"
                           : "bg-slate-500"
                       }`}
@@ -393,7 +417,7 @@ function ChatPage() {
                       {selectedUser.username}
                     </h2>
                     <div className="flex items-center gap-1.5">
-                      {onlineUsers.has(String(selectedUser.id)) ? (
+                      {onlineUsers.has(Number(selectedUser.id)) ? (
                         <>
                           <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
                           <span className="text-xs text-emerald-400 font-medium">
@@ -450,15 +474,20 @@ function ChatPage() {
                       <button
                         onClick={async () => {
                           try {
-                            if (isBlocked) {
-                              // 🔓 UNBLOCK
+                            if (blockStatus.blockedByMe) {
                               await unblockUserApi(selectedUser.id);
-                              setIsBlocked(false);
                             } else {
-                              // 🔒 BLOCK
                               await blockUserApi(selectedUser.id);
-                              setIsBlocked(true);
                             }
+
+                            const res = await getBlockStatusApi(
+                              selectedUser.id
+                            );
+
+                            setBlockStatus({
+                              blockedByMe: res.data?.blockedByMe ?? false,
+                              blockedByOther: res.data?.blockedByOther ?? false,
+                            });
 
                             setShowMenu(false);
                           } catch (err) {
@@ -466,12 +495,14 @@ function ChatPage() {
                           }
                         }}
                         className={`w-full text-left px-4 py-3 transition ${
-                          isBlocked
+                          blockStatus.blockedByMe
                             ? "hover:bg-green-500/10 text-green-400"
                             : "hover:bg-yellow-500/10 text-yellow-400"
                         }`}
                       >
-                        {isBlocked ? "🔓 Bỏ chặn" : "🚫 Chặn người dùng"}
+                        {blockStatus.blockedByMe
+                          ? "🔓 Bỏ chặn"
+                          : "🚫 Chặn người dùng"}
                       </button>
 
                       {/* 🔥 DIVIDER */}
@@ -502,9 +533,13 @@ function ChatPage() {
 
               {/* INPUT */}
               <div className="p-4 bg-transparent">
-                {isBlocked ? (
+                {blockStatus.blockedByMe ? (
                   <div className="text-center text-red-400">
                     🚫 Bạn đã chặn người này
+                  </div>
+                ) : blockStatus.blockedByOther ? (
+                  <div className="text-center text-yellow-400">
+                    ⚠️ Bạn đã bị người này chặn
                   </div>
                 ) : (
                   <ChatInput

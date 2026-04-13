@@ -44,3 +44,7 @@ export const unblockUserApi = (targetId) => {
 export const checkBlockApi = (targetId) => {
   return axiosClient.get(`/block/check/${targetId}`);
 };
+
+export const getBlockStatusApi = (targetId) => {
+  return axiosClient.get(`/block/status/${targetId}`);
+};

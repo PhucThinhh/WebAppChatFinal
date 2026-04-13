@@ -52,17 +52,6 @@ export const connectSocket = (userId, onReady) => {
 
       pendingRooms = {};
 
-      // online status
-      if (!statusSubscription) {
-        statusSubscription = stompClient.subscribe(
-          "/topic/users/status",
-          (msg) => {
-            const data = JSON.parse(msg.body);
-            console.log("👤 STATUS:", data);
-          }
-        );
-      }
-
       onReady?.();
     },
 
@@ -185,12 +174,18 @@ export const sendMessageSocket = (message) => {
 export const subscribeUserStatus = (callback) => {
   if (!stompClient || connectionState !== "CONNECTED") return;
 
-  if (statusSubscription) return;
+  // 🔥 unsubscribe cũ nếu có
+  if (statusSubscription) {
+    statusSubscription.unsubscribe();
+  }
 
   statusSubscription = stompClient.subscribe("/topic/users/status", (msg) => {
     const data = JSON.parse(msg.body);
+    console.log("👤 STATUS:", data);
     callback?.(data);
   });
+
+  return statusSubscription;
 };
 
 // ================= DISCONNECT =================
@@ -205,4 +200,13 @@ export const disconnectSocket = () => {
   statusSubscription = null;
 
   console.log("❌ SOCKET DISCONNECTED");
+};
+export const subscribeOnlineList = (callback) => {
+  if (!stompClient || connectionState !== "CONNECTED") return;
+
+  return stompClient.subscribe("/topic/users/list", (msg) => {
+    const data = JSON.parse(msg.body);
+    console.log("👥 ONLINE LIST:", data);
+    callback?.(data);
+  });
 };

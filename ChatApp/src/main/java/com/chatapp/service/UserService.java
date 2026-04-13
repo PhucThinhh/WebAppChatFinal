@@ -63,9 +63,9 @@ public class UserService {
         return userRepository.findAll();
     }
 
-    public User updateUser(String phone, UpdateUserRequest request) {
+    public User updateUser(Long userId, UpdateUserRequest request) {
 
-        User user = getByPhone(phone);
+        User user = getById(userId);
 
         // 🔹 username
         if (request.getUsername() != null && !request.getUsername().isBlank()) {
@@ -127,14 +127,11 @@ public class UserService {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Email không tồn tại"));
     }
-    public String changePassword(ChangePasswordRequest request) {
+    public String changePassword(Long userId, ChangePasswordRequest request) {
 
 
-        String phone = SecurityContextHolder.getContext()
-                .getAuthentication()
-                .getName();
-
-        User user = getByPhone(phone);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
         if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
             throw new RuntimeException("Mật khẩu cũ không đúng");
@@ -149,5 +146,10 @@ public class UserService {
         userRepository.save(user);
 
         return "Đổi mật khẩu thành công";
+    }
+
+    public User getById(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
     }
 }

@@ -30,4 +30,12 @@ public class BlockedService {
         return repo.existsByUserIdAndBlockedUserId(a, b)
                 || repo.existsByUserIdAndBlockedUserId(b, a);
     }
+
+    public boolean isBlockedByMe(Long me, Long target) {
+        return repo.existsByUserIdAndBlockedUserId(me, target);
+    }
+
+    public boolean isBlockedByOther(Long me, Long target) {
+        return repo.existsByUserIdAndBlockedUserId(target, me);
+    }
 }

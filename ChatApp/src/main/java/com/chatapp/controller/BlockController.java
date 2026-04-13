@@ -6,6 +6,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/block")
 @RequiredArgsConstructor
@@ -38,5 +40,18 @@ public class BlockController {
         return ResponseEntity.ok(
                 service.isEitherBlocked(getCurrentUserId(), targetId)
         );
+    }
+    @GetMapping("/status/{targetId}")
+    public ResponseEntity<?> getStatus(@PathVariable Long targetId) {
+
+        Long me = getCurrentUserId();
+
+        boolean blockedByMe = service.isBlockedByMe(me, targetId);
+        boolean blockedByOther = service.isBlockedByOther(me, targetId);
+
+        return ResponseEntity.ok(Map.of(
+                "blockedByMe", blockedByMe,
+                "blockedByOther", blockedByOther
+        ));
     }
 }

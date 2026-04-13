@@ -43,14 +43,18 @@ public class FriendshipService {
 
     // ✅ CHẤP NHẬN
     public void accept(Long id) {
-        Friendship f = repo.findById(id).orElseThrow();
+        Friendship f = repo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy lời mời"));
+
         f.setStatus(Friendship.Status.ACCEPTED);
         repo.save(f);
     }
 
     // ❌ TỪ CHỐI
     public void reject(Long id) {
-        Friendship f = repo.findById(id).orElseThrow();
+        Friendship f = repo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy lời mời"));
+
         f.setStatus(Friendship.Status.REJECTED);
         repo.save(f);
     }
@@ -64,7 +68,8 @@ public class FriendshipService {
                     ? f.getReceiverId()
                     : f.getSenderId();
 
-            User u = userRepo.findById(friendId).orElseThrow();
+            User u = userRepo.findById(friendId)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
 
             return FriendshipMapper.toDTO(f, u);
 
@@ -76,20 +81,30 @@ public class FriendshipService {
 
         return repo.findRequests(userId).stream().map(f -> {
 
-            User u = userRepo.findById(f.getSenderId()).orElseThrow();
+            User u = userRepo.findById(f.getSenderId())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
 
             return FriendshipMapper.toDTO(f, u);
 
         }).toList();
     }
 
+    // 🔍 SEARCH USER (FIX TỐI ƯU)
     public List<UserSearchDTO> searchUsers(String keyword, Long currentUserId) {
+
+        if (keyword == null || keyword.isBlank()) return List.of();
+
+        String k = keyword.toLowerCase();
 
         List<User> users = userRepo.findAll();
 
         return users.stream()
                 .filter(user -> !user.getId().equals(currentUserId))
-                .filter(user -> isMatch(user, keyword, currentUserId))
+                .filter(user ->
+                        (user.getUsername() != null && user.getUsername().toLowerCase().contains(k)) ||
+                                (user.getPhone() != null && user.getPhone().contains(k)) ||
+                                (user.getEmail() != null && user.getEmail().toLowerCase().contains(k))
+                )
                 .map(user -> {
 
                     Friendship f = repo
@@ -115,30 +130,4 @@ public class FriendshipService {
                 })
                 .toList();
     }
-
-
-    private boolean isMatch(User user, String keyword, Long currentUserId) {
-
-        if (keyword == null || keyword.isBlank()) return false;
-
-        String k = keyword.toLowerCase();
-
-        Friendship f = repo
-                .findRelation(currentUserId, user.getId())
-                .orElse(null);
-
-        boolean isFriend = f != null && f.getStatus() == Friendship.Status.ACCEPTED;
-
-        if (!isFriend) {
-            return (user.getPhone() != null && user.getPhone().contains(k))
-                    || (user.getEmail() != null && user.getEmail().toLowerCase().contains(k));
-        }
-
-        return (user.getUsername() != null && user.getUsername().toLowerCase().contains(k))
-                || (user.getPhone() != null && user.getPhone().contains(k))
-                || (user.getEmail() != null && user.getEmail().toLowerCase().contains(k));
-    }
-
-
-
 }

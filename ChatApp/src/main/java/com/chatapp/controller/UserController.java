@@ -30,9 +30,9 @@ public class UserController {
     @GetMapping("/me")
     public UserResponse getProfile(Authentication authentication) {
 
-        String phone = authentication.getName();
+        Long userId = Long.valueOf(authentication.getName()); // ✅ lấy ID
 
-        User user = userService.getByPhone(phone);
+        User user = userService.getById(userId); // ✅ đổi sang getById
 
         return map(user);
     }
@@ -43,9 +43,9 @@ public class UserController {
             @RequestBody UpdateUserRequest request
     ) {
 
-        String phone = authentication.getName();
+        Long userId = Long.valueOf(authentication.getName());
 
-        User user = userService.updateUser(phone, request);
+        User user = userService.updateUser(userId, request);
 
         return map(user);
     }
@@ -56,9 +56,9 @@ public class UserController {
             @RequestParam("file") MultipartFile file
     ) throws Exception {
 
-        String phone = authentication.getName();
+        Long userId = Long.valueOf(authentication.getName());
 
-        User user = userService.getByPhone(phone);
+        User user = userService.getById(userId);
 
         String url = s3Service.uploadFile(file);
 
@@ -74,9 +74,9 @@ public class UserController {
             @RequestParam("file") MultipartFile file
     ) throws Exception {
 
-        String phone = authentication.getName();
+        Long userId = Long.valueOf(authentication.getName());
 
-        User user = userService.getByPhone(phone);
+        User user = userService.getById(userId);
 
         String url = s3Service.uploadFile(file);
 
@@ -111,7 +111,9 @@ public class UserController {
         }
 
         try {
-            String result = userService.changePassword(request);
+            Long userId = Long.valueOf(authentication.getName());
+
+            String result = userService.changePassword(userId, request);
 
             return ResponseEntity.ok(
                     Map.of("message", result)

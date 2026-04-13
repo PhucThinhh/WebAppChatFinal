@@ -2,14 +2,11 @@ package com.chatapp.controller;
 
 import com.chatapp.dto.FriendRequestDTO;
 import com.chatapp.dto.FriendResponseDTO;
-import com.chatapp.entity.User;
-import com.chatapp.repository.UserRepository;
+import com.chatapp.dto.UserSearchDTO;
 import com.chatapp.service.FriendshipService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-import com.chatapp.dto.UserSearchDTO;
-
 
 import java.util.List;
 
@@ -19,22 +16,14 @@ import java.util.List;
 public class FriendshipController {
 
     private final FriendshipService service;
-    private final UserRepository userRepository;
 
     // ================== HELPER ==================
-    private String getCurrentUserPhone() {
-        return SecurityContextHolder.getContext()
-                .getAuthentication()
-                .getName(); // sub trong token = phone
-    }
-
     private Long getCurrentUserId() {
-        String phone = getCurrentUserPhone();
-
-        User user = userRepository.findByPhone(phone)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        return user.getId();
+        return Long.valueOf(
+                SecurityContextHolder.getContext()
+                        .getAuthentication()
+                        .getName()
+        );
     }
 
     // ================== API ==================
@@ -64,7 +53,7 @@ public class FriendshipController {
         return "Đã từ chối";
     }
 
-    // 👥 DANH SÁCH BẠN (KHÔNG CẦN userId)
+    // 👥 DANH SÁCH BẠN
     @GetMapping
     public List<FriendResponseDTO> getFriends() {
 
@@ -73,7 +62,7 @@ public class FriendshipController {
         return service.getFriends(userId);
     }
 
-    // 📩 DANH SÁCH LỜI MỜI (KHÔNG CẦN userId)
+    // 📩 DANH SÁCH LỜI MỜI
     @GetMapping("/requests")
     public List<FriendResponseDTO> getRequests() {
 
@@ -82,6 +71,7 @@ public class FriendshipController {
         return service.getRequests(userId);
     }
 
+    // 🔍 TÌM KIẾM USER
     @GetMapping("/search")
     public List<UserSearchDTO> search(@RequestParam String keyword) {
 
@@ -89,5 +79,4 @@ public class FriendshipController {
 
         return service.searchUsers(keyword, userId);
     }
-
 }

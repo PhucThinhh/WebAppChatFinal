@@ -92,7 +92,7 @@ public class AuthController {
         return userService.loginByPhone(request.getPhone(), request.getPassword())
                 .map(user -> LoginResponse.builder()
                         .token(jwtService.generateToken(
-                                user.getPhone(),
+                                String.valueOf(user.getId()), // ✅ FIX
                                 user.getRole().name()
                         ))
                         .username(user.getUsername())

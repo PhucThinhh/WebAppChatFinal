@@ -34,6 +34,7 @@ import {
   getGroupMembersApi,
   removeMemberApi,
   deleteGroupApi,
+  updateRoleApi,
 } from "../api/chatApi";
 import { getFriendsApi } from "../../friend/api/friendApi";
 
@@ -69,9 +70,13 @@ function ChatPage() {
   const [showGroupMenu, setShowGroupMenu] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [showRemoveMemberModal, setShowRemoveMemberModal] = useState(false);
+  const [showUpdateRoleModal, setShowUpdateRoleModal] = useState(false);
   const [friendCandidates, setFriendCandidates] = useState([]);
   const [memberCandidates, setMemberCandidates] = useState([]);
+  const [roleCandidates, setRoleCandidates] = useState([]);
   const [selectedMemberIds, setSelectedMemberIds] = useState([]);
+  const [selectedRoleUserId, setSelectedRoleUserId] = useState(null);
+  const [selectedRoleValue, setSelectedRoleValue] = useState("MEMBER");
 
   const [forwardMessage, setForwardMessage] = useState(null);
   const [showForwardModal, setShowForwardModal] = useState(false);
@@ -107,6 +112,9 @@ function ChatPage() {
   const getFriendName = (friend) =>
     friend?.username || friend?.name || `User ${getFriendId(friend)}`;
 
+  const getMemberRole = (member) =>
+    String(member?.role || "MEMBER").toUpperCase();
+
   const upsertConversation = (conversation) => {
     setConversations((prev) => {
       const existed = prev.find((item) => item.id === conversation.id);
@@ -139,16 +147,19 @@ function ChatPage() {
     setShowForwardModal(true);
   };
 
-  const handleForwardToUser = (user) => {
+  const handleForwardToTarget = (target) => {
     if (!forwardMessage) return;
+    const isGroupTarget = target?.type === "GROUP";
 
-    const newRoomId = [Number(currentUserId), Number(user.id)]
-      .sort((a, b) => a - b)
-      .join("_");
+    const newRoomId = isGroupTarget
+      ? `group_${target.id}`
+      : [Number(currentUserId), Number(target.id)]
+          .sort((a, b) => a - b)
+          .join("_");
 
     const msg = {
       senderId: Number(currentUserId),
-      receiverId: Number(user.id),
+      receiverId: isGroupTarget ? null : Number(target.id),
       roomId: newRoomId,
       content: forwardMessage.content,
       fileUrl: forwardMessage.fileUrl,
@@ -162,6 +173,14 @@ function ChatPage() {
     setShowForwardModal(false);
     setForwardMessage(null);
   };
+
+  const forwardableGroups = useMemo(() => {
+    return conversations.filter((conversation) => {
+      if (conversation.type !== "GROUP") return false;
+      if (!selectedGroup?.id) return true;
+      return String(conversation.targetGroup?.id) !== String(selectedGroup.id);
+    });
+  }, [conversations, selectedGroup]);
 
   
 
@@ -744,6 +763,50 @@ function ChatPage() {
     }
   };
 
+  const handleOpenUpdateRoleModal = async () => {
+    try {
+      if (!selectedGroup?.id) return;
+
+      const [friendsRes, membersRes] = await Promise.all([
+        getFriendsApi(),
+        getGroupMembersApi(selectedGroup.id),
+      ]);
+
+      const friends = Array.isArray(friendsRes.data) ? friendsRes.data : [];
+      const members = Array.isArray(membersRes.data) ? membersRes.data : [];
+      const friendById = new Map(
+        friends.map((friend) => [getFriendId(friend), friend])
+      );
+
+      const mappedRoleCandidates = members
+        .map((member) => {
+          const memberId = Number(member?.userId ?? member);
+          const friendInfo = friendById.get(memberId);
+          return {
+            id: memberId,
+            username: friendInfo?.username || `User ${memberId}`,
+            avatar: friendInfo?.avatar || null,
+            role: getMemberRole(member),
+          };
+        })
+        .filter(
+          (member) =>
+            member.id &&
+            member.id !== Number(currentUserId) &&
+            member.role !== "OWNER"
+        );
+
+      setRoleCandidates(mappedRoleCandidates);
+      setSelectedRoleUserId(mappedRoleCandidates[0]?.id ?? null);
+      setSelectedRoleValue(mappedRoleCandidates[0]?.role ?? "MEMBER");
+      setShowUpdateRoleModal(true);
+      setShowGroupMenu(false);
+    } catch (error) {
+      console.error("Load role members lỗi:", error);
+      toast.error("Không tải được danh sách thành viên");
+    }
+  };
+
   const toggleSelectMember = (friend) => {
     const id = getFriendId(friend);
     if (!id) return;
@@ -876,6 +939,50 @@ function ChatPage() {
     }
   };
 
+  const handleUpdateRole = async () => {
+    if (!selectedGroup?.id || !selectedRoleUserId || !currentUserId) return;
+
+    try {
+      await updateRoleApi(
+        selectedGroup.id,
+        Number(selectedRoleUserId),
+        selectedRoleValue,
+        Number(currentUserId)
+      );
+
+      setRoleCandidates((prev) =>
+        prev.map((member) =>
+          member.id === Number(selectedRoleUserId)
+            ? { ...member, role: selectedRoleValue }
+            : member
+        )
+      );
+      setShowUpdateRoleModal(false);
+      toast.success("Cập nhật quyền thành công! 🎉");
+    } catch (error) {
+      const message = error?.response?.data || "Cập nhật quyền thất bại";
+
+      if (typeof message === "string" && message.includes("Không thuộc nhóm")) {
+        toast.error("Không thuộc nhóm");
+        return;
+      }
+      if (typeof message === "string" && message.includes("Không có quyền")) {
+        toast.error("Không có quyền");
+        return;
+      }
+      if (typeof message === "string" && message.includes("User không tồn tại")) {
+        toast.error("User không tồn tại");
+        return;
+      }
+      if (typeof message === "string" && message.includes("Không thể sửa OWNER")) {
+        toast.error("Không thể sửa OWNER");
+        return;
+      }
+
+      toast.error("Cập nhật quyền thất bại");
+    }
+  };
+
   const currentTitle = selectedGroup
     ? selectedGroup.name
     : selectedUser?.username || "Cuộc trò chuyện";
@@ -959,7 +1066,7 @@ function ChatPage() {
         </aside>
       )}
 
-      <main className="flex-1 flex flex-col bg-gradient-to-b from-[#1e293b] to-[#0f172a] relative z-10">
+      <main className="flex-1 flex flex-col bg-gradient-to-b from-[#1e293b] to-[#0f172a] relative z-40">
         {activeTab === "chat" &&
           (!selectedUser && !selectedGroup ? (
             <div className="flex-1 flex flex-col items-center justify-center space-y-4">
@@ -1015,6 +1122,12 @@ function ChatPage() {
                           className="w-full text-left px-4 py-3 hover:bg-red-500/10 text-red-300 transition"
                         >
                           ➖ Xoá thành viên
+                        </button>
+                        <button
+                          onClick={handleOpenUpdateRoleModal}
+                          className="w-full text-left px-4 py-3 hover:bg-violet-500/10 text-violet-300 transition"
+                        >
+                          🛡️ Cập nhật quyền
                         </button>
                         <button
                           onClick={handleDeleteGroup}
@@ -1206,7 +1319,34 @@ function ChatPage() {
           <div className="bg-slate-800 p-4 rounded-xl w-96 max-h-[500px] overflow-y-auto">
             <h3 className="text-white mb-3">Chọn người để chuyển tiếp</h3>
 
-            <FriendsList onSelectUser={(user) => handleForwardToUser(user)} />
+            <div className="mb-4">
+              <h4 className="text-slate-300 text-sm mb-2">Chuyển tiếp tới nhóm</h4>
+              {forwardableGroups.length === 0 ? (
+                <div className="text-slate-500 text-sm">
+                  Không có nhóm phù hợp để chuyển tiếp
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {forwardableGroups.map((group) => (
+                    <button
+                      key={group.id}
+                      onClick={() =>
+                        handleForwardToTarget({
+                          id: group.targetGroup?.id,
+                          type: "GROUP",
+                        })
+                      }
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-slate-200"
+                    >
+                      {group.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <h4 className="text-slate-300 text-sm mb-2">Chuyển tiếp tới cá nhân</h4>
+            <FriendsList onSelectUser={(user) => handleForwardToTarget(user)} />
 
             <button
               onClick={() => setShowForwardModal(false)}
@@ -1327,6 +1467,83 @@ function ChatPage() {
                 className="px-3 py-2 rounded-lg bg-red-500 text-white disabled:opacity-50"
               >
                 Xoá
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showUpdateRoleModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999]">
+          <div className="bg-slate-800 p-4 rounded-xl w-[420px] max-h-[520px] overflow-y-auto">
+            <h3 className="text-white mb-3">Cập nhật quyền thành viên</h3>
+
+            {roleCandidates.length === 0 ? (
+              <div className="text-slate-400 text-sm">
+                Không có thành viên phù hợp để cập nhật quyền
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2 mb-4">
+                  {roleCandidates.map((member, index) => (
+                    <label
+                      key={member.id || index}
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer"
+                    >
+                      <input
+                        type="radio"
+                        name="update-role-user"
+                        checked={selectedRoleUserId === member.id}
+                        onChange={() => {
+                          setSelectedRoleUserId(member.id);
+                          setSelectedRoleValue(member.role || "MEMBER");
+                        }}
+                      />
+                      <img
+                        src={resolveAvatar(member?.avatar)}
+                        alt={getFriendName(member)}
+                        onError={(e) => {
+                          e.currentTarget.src = DEFAULT_AVATAR;
+                        }}
+                        className="w-9 h-9 rounded-full object-cover bg-slate-700"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-white truncate">{getFriendName(member)}</div>
+                        <div className="text-xs text-slate-400">
+                          Quyền hiện tại: {member.role}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="mb-4">
+                  <label className="text-slate-300 text-sm mb-1 block">Quyền mới</label>
+                  <select
+                    value={selectedRoleValue}
+                    onChange={(e) => setSelectedRoleValue(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-700 text-white border border-slate-600 outline-none"
+                  >
+                    <option value="MEMBER">MEMBER</option>
+                    <option value="ADMIN">ADMIN</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setShowUpdateRoleModal(false)}
+                className="px-3 py-2 rounded-lg bg-slate-700 text-slate-200"
+              >
+                Huỷ
+              </button>
+              <button
+                onClick={handleUpdateRole}
+                disabled={!selectedRoleUserId}
+                className="px-3 py-2 rounded-lg bg-violet-500 text-white disabled:opacity-50"
+              >
+                Cập nhật
               </button>
             </div>
           </div>

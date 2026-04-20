@@ -77,3 +77,9 @@ export const deleteGroupApi = (groupId, currentUserId) => {
     `/chat/group/delete?groupId=${groupId}&currentUserId=${currentUserId}`
   );
 };
+
+export const updateRoleApi = (groupId, userId, role, currentUserId) => {
+  return axiosClient.put(
+    `/chat/group/update-role?groupId=${groupId}&userId=${userId}&role=${role}&currentUserId=${currentUserId}`
+  );
+};

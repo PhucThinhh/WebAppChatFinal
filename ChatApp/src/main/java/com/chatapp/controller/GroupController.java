@@ -3,6 +3,7 @@ package com.chatapp.controller;
 import com.chatapp.dto.CreateGroupDTO;
 import com.chatapp.entity.Group;
 import com.chatapp.entity.GroupMember;
+import com.chatapp.entity.GroupRole;
 import com.chatapp.service.GroupService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -59,5 +60,15 @@ public class GroupController {
             @RequestParam Long currentUserId
     ) {
         groupService.deleteGroup(groupId, currentUserId);
+    }
+
+    @PutMapping("/update-role")
+    public void updateRole(
+            @RequestParam String groupId,
+            @RequestParam Long userId,
+            @RequestParam GroupRole role, // 🔥 tự map enum
+            @RequestParam Long currentUserId
+    ) {
+        groupService.updateRole(groupId, userId, role, currentUserId);
     }
 }

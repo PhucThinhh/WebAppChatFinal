@@ -25,5 +25,5 @@ public class GroupMember {
 
     private Long userId;
 
-    private String role; // ADMIN | MEMBER
+    private GroupRole role;
 }

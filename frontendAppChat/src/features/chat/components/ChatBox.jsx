@@ -188,7 +188,11 @@ const ChatBox = memo(
 
                     {/* MENU */}
                     {selectedMessageId === messageId && (
-                      <div className="absolute -top-8 right-0 flex gap-2">
+                      <div
+                        className={`absolute top-full mt-2 z-20 flex gap-2 ${
+                          isMe ? "right-0" : "left-0"
+                        }`}
+                      >
                         {!msg.isRecalled && (
                           <button
                             onClick={(e) => {

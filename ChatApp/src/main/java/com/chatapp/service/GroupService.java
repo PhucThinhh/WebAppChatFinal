@@ -3,6 +3,7 @@ package com.chatapp.service;
 import com.chatapp.dto.CreateGroupDTO;
 import com.chatapp.entity.Group;
 import com.chatapp.entity.GroupMember;
+import com.chatapp.entity.GroupRole;
 import com.chatapp.repository.GroupMemberRepository;
 import com.chatapp.repository.GroupRepository;
 import lombok.RequiredArgsConstructor;
@@ -38,7 +39,7 @@ public class GroupService {
         memberRepo.save(GroupMember.builder()
                 .groupId(group.getId())
                 .userId(dto.getCreatorId())
-                .role("ADMIN")
+                .role(GroupRole.OWNER)
                 .build());
 
         // 3. thêm member
@@ -50,7 +51,7 @@ public class GroupService {
                 memberRepo.save(GroupMember.builder()
                         .groupId(group.getId())
                         .userId(id)
-                        .role("MEMBER")
+                        .role(GroupRole.MEMBER)
                         .build());
             }
         }
@@ -78,7 +79,7 @@ public class GroupService {
                 .findByGroupIdAndUserId(groupId, currentUserId)
                 .orElseThrow(() -> new RuntimeException("Không thuộc nhóm"));
 
-        if (!"ADMIN".equals(me.getRole()) && !"OWNER".equals(me.getRole())) {
+        if (me.getRole() != GroupRole.ADMIN && me.getRole() != GroupRole.OWNER) {
             throw new RuntimeException("Không có quyền");
         }
 
@@ -89,7 +90,7 @@ public class GroupService {
         memberRepo.save(GroupMember.builder()
                 .groupId(groupId)
                 .userId(userId)
-                .role("MEMBER")
+                .role(GroupRole.MEMBER)
                 .build());
     }
 
@@ -103,7 +104,7 @@ public class GroupService {
         GroupMember me = memberRepo.findByGroupIdAndUserId(groupId, currentUserId)
                 .orElseThrow(() -> new RuntimeException("Bạn không thuộc nhóm"));
 
-        if (!"ADMIN".equals(me.getRole())) {
+        if (me.getRole() != GroupRole.ADMIN && me.getRole() != GroupRole.OWNER) {
             throw new RuntimeException("Bạn không có quyền");
         }
 
@@ -136,5 +137,25 @@ public class GroupService {
 
         // 🔥 xoá group
         groupRepo.deleteById(groupId);
+    }
+
+    public void updateRole(String groupId, Long targetUserId, GroupRole newRole, Long currentUserId) {
+
+        GroupMember me = memberRepo.findByGroupIdAndUserId(groupId, currentUserId)
+                .orElseThrow(() -> new RuntimeException("Không thuộc nhóm"));
+
+        if (me.getRole() != GroupRole.OWNER) {
+            throw new RuntimeException("Không có quyền");
+        }
+
+        GroupMember target = memberRepo.findByGroupIdAndUserId(groupId, targetUserId)
+                .orElseThrow(() -> new RuntimeException("User không tồn tại"));
+
+        if (target.getRole() == GroupRole.OWNER) {
+            throw new RuntimeException("Không thể sửa OWNER");
+        }
+
+        target.setRole(newRole);
+        memberRepo.save(target);
     }
 }

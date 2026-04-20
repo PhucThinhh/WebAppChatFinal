@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import ChatBox from "../components/chatBox";
 import ChatInput from "../components/ChatInput";
+import CreateGroup from "../components/CreateGroup";
 
 import FriendsList from "../../friend/components/FriendsList";
 import FriendRequests from "../../friend/components/FriendRequests";
@@ -14,6 +15,8 @@ import useUser from "../hooks/useUser";
 
 import ProfileModal from "../../user/components/ProfileModal";
 import ChangePasswordModal from "../../user/components/ChangePasswordModal";
+
+
 
 import {
   disconnectSocket,
@@ -58,6 +61,8 @@ function ChatPage() {
 
   const [forwardMessage, setForwardMessage] = useState(null);
   const [showForwardModal, setShowForwardModal] = useState(false);
+
+  const [selectedGroup, setSelectedGroup] = useState(null);
 
 const [blockStatus, setBlockStatus] = useState({
   blockedByMe: false,
@@ -144,12 +149,24 @@ const [blockStatus, setBlockStatus] = useState({
 
   // ================= ROOM ID =================
   const roomId = useMemo(() => {
-    if (!currentUserId || !selectedUser?.id) return null;
+    // 🔥 GROUP
+    if (selectedGroup) {
+      return `group_${selectedGroup.id}`;
+    }
+
+    // 🔥 1vs1
+    if (!currentUserId || (!selectedUser && !selectedGroup)) return;
 
     return [Number(currentUserId), Number(selectedUser.id)]
       .sort((a, b) => a - b)
       .join("_");
-  }, [currentUserId, selectedUser]);
+  }, [currentUserId, selectedUser, selectedGroup]);
+
+  const handleSelectGroup = (group) => {
+    setSelectedGroup(group);
+    setSelectedUser(null); // 🔥 QUAN TRỌNG
+    setActiveTab("chat");
+  };
 
   const handleDeleteConversation = async () => {
     if (!roomId) return;
@@ -289,11 +306,11 @@ const [blockStatus, setBlockStatus] = useState({
     }
 
     if (!input?.trim()) return;
-    if (!currentUserId || !selectedUser?.id) return;
+    if (!currentUserId || (!selectedUser && !selectedGroup)) return;
 
     const msg = {
       senderId: Number(currentUserId),
-      receiverId: Number(selectedUser.id),
+      receiverId: selectedUser?.id || null,
       roomId,
       content: input,
       type: "TEXT",
@@ -309,11 +326,11 @@ const [blockStatus, setBlockStatus] = useState({
       return;
     }
 
-    if (!currentUserId || !selectedUser?.id) return;
+    if (!currentUserId || (!selectedUser && !selectedGroup)) return;
 
     const msg = {
       senderId: Number(currentUserId),
-      receiverId: Number(selectedUser.id),
+      receiverId: selectedUser?.id || null,
       roomId,
       type: "FILE",
       fileUrl,
@@ -414,7 +431,9 @@ const [blockStatus, setBlockStatus] = useState({
 
                   <div className="flex flex-col">
                     <h2 className="text-white text-lg font-bold tracking-tight uppercase">
-                      {selectedUser.username}
+                      {selectedGroup
+                        ? selectedGroup.name
+                        : selectedUser.username}
                     </h2>
                     <div className="flex items-center gap-1.5">
                       {onlineUsers.has(Number(selectedUser.id)) ? (
@@ -567,6 +586,16 @@ const [blockStatus, setBlockStatus] = useState({
               <FriendSearch onSelectUser={handleSelectUser} />
             )}
           </div>
+        )}
+
+        {activeTab === "group" && (
+          <CreateGroup
+            user={user}
+            friends={[]} // 👉 tạm thời để trống hoặc truyền FriendsList sau
+            onCreated={(group) => {
+              handleSelectGroup(group);
+            }}
+          />
         )}
       </main>
 

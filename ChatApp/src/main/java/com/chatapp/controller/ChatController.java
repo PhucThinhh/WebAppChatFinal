@@ -46,12 +46,7 @@ public class ChatController {
             @PathVariable String id,
             Principal principal) {
 
-        System.out.println("PRINCIPAL: " + principal.getName());
-
-        User user = userRepository.findByPhone(principal.getName())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        Long userId = user.getId();
+        Long userId = Long.parseLong(principal.getName());
 
         chatService.deleteForMe(id, userId);
     }

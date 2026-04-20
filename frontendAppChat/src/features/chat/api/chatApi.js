@@ -48,3 +48,7 @@ export const checkBlockApi = (targetId) => {
 export const getBlockStatusApi = (targetId) => {
   return axiosClient.get(`/block/status/${targetId}`);
 };
+
+export const createGroupApi = (data) => {
+  return axiosClient.post("/chat/group/create", data);
+};

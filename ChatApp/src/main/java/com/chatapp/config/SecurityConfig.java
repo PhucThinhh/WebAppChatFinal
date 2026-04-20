@@ -38,7 +38,7 @@ public class SecurityConfig {
                         // 🔥 USER + ADMIN
                         .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
 
-                        .requestMatchers("/api/chat/**").authenticated()
+                        .requestMatchers("/api/chat/**").permitAll()
 
                         .requestMatchers("/uploads/**").permitAll()
 

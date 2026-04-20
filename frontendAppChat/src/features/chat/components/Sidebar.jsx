@@ -6,6 +6,7 @@ import {
   LogOut,
   Key,
   Search,
+  Users,
 } from "lucide-react";
 
 function Sidebar({
@@ -69,6 +70,17 @@ function Sidebar({
           }`}
         >
           <Calendar size={24} />
+        </div>
+
+        <div
+          onClick={() => onSelectTab("group")}
+          className={`p-3 rounded-2xl cursor-pointer transition ${
+            activeTab === "group"
+              ? "bg-blue-500/20 text-blue-400"
+              : "text-slate-500 hover:text-white"
+          }`}
+        >
+          <Users size={24} />
         </div>
 
         {/* SEARCH FRIENDS 🔥 NEW */}

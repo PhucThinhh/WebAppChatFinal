@@ -3,6 +3,7 @@ package com.chatapp.service;
 import com.chatapp.dto.SendMessageDTO;
 import com.chatapp.entity.Message;
 import com.chatapp.repository.ConversationStateRepository;
+import com.chatapp.repository.GroupMemberRepository;
 import com.chatapp.repository.MessageRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ public class ChatService {
     private final SimpMessagingTemplate messagingTemplate;
     private final ConversationStateRepository conversationRepository;
     private final BlockedService blockedService;
+    private final GroupMemberRepository memberRepo;
 
     // =========================
     // SEND MESSAGE
@@ -34,7 +36,26 @@ public class ChatService {
             return null; // ❌ KHÔNG gửi gì cả
         }
 
-        String roomId = generateRoomId(dto.getSenderId(), dto.getReceiverId());
+        String roomId;
+
+        if (dto.getRoomId() != null && dto.getRoomId().startsWith("group_")) {
+            // 🔥 GROUP
+            roomId = dto.getRoomId();
+
+            // ❗ check member
+            String groupId = roomId.replace("group_", "");
+
+            boolean isMember = memberRepo
+                    .existsByGroupIdAndUserId(groupId, dto.getSenderId());
+
+            if (!isMember) {
+                throw new RuntimeException("Bạn không thuộc nhóm");
+            }
+
+        } else {
+            // 🔥 1vs1 (giữ nguyên)
+            roomId = generateRoomId(dto.getSenderId(), dto.getReceiverId());
+        }
 
         Message message = Message.builder()
                 .senderId(dto.getSenderId())

@@ -1,4 +1,4 @@
-import { Send, Paperclip, Smile } from "lucide-react";
+import { Send, Paperclip, Smile, Sparkles } from "lucide-react";
 import { useRef, useEffect, useState } from "react";
 import EmojiPicker from "emoji-picker-react";
 import { uploadFileApi } from "../api/chatApi";
@@ -12,6 +12,8 @@ function ChatInput({ input, setInput, onSend, onSendFile }) {
   // 🔥 NEW STATE
   const [previewFile, setPreviewFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  /** Gửi tin tự thêm tiền tố /ai (ChatService) */
+  const [aiMode, setAiMode] = useState(false);
 
   // AUTO RESIZE
   useEffect(() => {
@@ -26,7 +28,12 @@ function ChatInput({ input, setInput, onSend, onSendFile }) {
   const handleSend = () => {
     if (!input?.trim()) return;
 
-    onSend(input.trim());
+    let text = input.trim();
+    if (aiMode && !text.startsWith("/ai")) {
+      text = `/ai ${text}`;
+    }
+
+    onSend(text);
     setInput("");
     setShowEmoji(false);
   };
@@ -103,12 +110,29 @@ function ChatInput({ input, setInput, onSend, onSendFile }) {
           <Paperclip size={22} />
         </button>
 
+        <button
+          type="button"
+          onClick={() => setAiMode((v) => !v)}
+          title={aiMode ? "Tắt chế độ hỏi AI" : "Bật chế độ hỏi AI (/ai)"}
+          className={`p-3 rounded-full transition shrink-0 ${
+            aiMode
+              ? "bg-emerald-600 text-white hover:bg-emerald-500"
+              : "hover:bg-slate-700 text-slate-300"
+          }`}
+        >
+          <Sparkles size={22} />
+        </button>
+
         {/* INPUT */}
         <textarea
           ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Nhập tin nhắn..."
+          placeholder={
+            aiMode
+              ? "Câu hỏi cho AI (gửi sẽ thêm /ai)..."
+              : "Nhập tin nhắn..."
+          }
           rows="1"
           className="flex-1 bg-slate-800 text-white px-5 py-3 rounded-3xl outline-none resize-none"
           onKeyDown={(e) => {

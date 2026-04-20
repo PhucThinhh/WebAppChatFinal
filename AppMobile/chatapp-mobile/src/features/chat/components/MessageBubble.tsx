@@ -9,25 +9,27 @@ import {
   View,
 } from "react-native";
 import { recallMessageApi } from "../api/chatApi";
-import { formatTime, isImageFile } from "../utils/chatHelpers";
+import { formatTime, isImageFile, normalizeMobileFileUrl } from "../utils/chatHelpers";
 
 type Props = {
   item: any;
   isMine: boolean;
+  /** Tin từ bot AI (senderId 0) */
+  isBot?: boolean;
   onRecalled?: () => void;
 };
 
-export default function MessageBubble({ item, isMine, onRecalled }: Props) {
+export default function MessageBubble({ item, isMine, isBot, onRecalled }: Props) {
   const content = item?.content || "";
   const createdAt = item?.createdAt || "";
-  const fileUrl = item?.fileUrl || "";
+  const fileUrl = normalizeMobileFileUrl(item?.fileUrl || "");
   const type = item?.type || "TEXT";
   const isFile = type === "FILE" || !!fileUrl;
   const imageFile = isFile && fileUrl && isImageFile(fileUrl);
   const isRecalled = !!item?.isRecalled;
 
   const handleLongPress = () => {
-    if (!isMine || !item?.id) return;
+    if (isBot || !isMine || !item?.id) return;
 
     Alert.alert("Tin nhắn", "Bạn muốn thu hồi tin nhắn này?", [
       { text: "Hủy", style: "cancel" },
@@ -52,12 +54,15 @@ export default function MessageBubble({ item, isMine, onRecalled }: Props) {
     <TouchableOpacity
       activeOpacity={0.9}
       onLongPress={handleLongPress}
-      disabled={!isMine}
+      disabled={!isMine || !!isBot}
       style={[
         styles.messageBubble,
-        isMine ? styles.myBubble : styles.otherBubble,
+        isBot ? styles.botBubble : isMine ? styles.myBubble : styles.otherBubble,
       ]}
     >
+      {isBot && !isRecalled && (
+        <Text style={styles.botLabel}>Trợ lý AI</Text>
+      )}
       {isRecalled ? (
         <Text style={styles.recalledText}>Tin nhắn đã được thu hồi</Text>
       ) : imageFile ? (
@@ -92,6 +97,20 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 6,
+  },
+  botBubble: {
+    alignSelf: "center",
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    maxWidth: "92%",
+  },
+  botLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#059669",
+    marginBottom: 4,
+    letterSpacing: 0.5,
   },
   myBubble: {
     alignSelf: "flex-end",

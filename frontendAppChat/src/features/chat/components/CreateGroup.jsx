@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createGroupApi } from "../api/chatApi";
 import axiosClient from "../../../services/axiosClient";
+import { toast } from "react-toastify";
 
 const DEFAULT_AVATAR =
   'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="%231e293b"/><circle cx="32" cy="24" r="12" fill="%23e2e8f0"/><path d="M12 56c4-12 14-18 20-18s16 6 20 18" fill="%23e2e8f0"/></svg>';
@@ -149,7 +150,7 @@ export default function CreateGroup({ onCreated }) {
       const res = await createGroupApi(payload);
 
       console.log("TẠO NHÓM THÀNH CÔNG:", res.data);
-      alert("Tạo nhóm thành công");
+      toast.success("Tạo nhóm thành công! 🎉");
 
       setGroupName("");
       setSelectedFriends([]);

@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useState } from "react";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import { deleteMessageApi, recallMessageApi } from "../api/chatApi";
 
 const BASE_URL = "http://localhost:8080";
@@ -10,9 +10,15 @@ const ChatBox = memo(
     messagesEndRef,
     currentUserId,
     onForwardMessage,
+    showSearch = false,
+    onCloseSearch,
   }) => {
     const [selectedMessageId, setSelectedMessageId] = useState(null);
     const [previewPdf, setPreviewPdf] = useState(null);
+    const [searchKeyword, setSearchKeyword] = useState("");
+    const [matchIndexes, setMatchIndexes] = useState([]);
+    const [activeMatchPos, setActiveMatchPos] = useState(-1);
+    const messageRefs = useRef({});
 
     // ================= AUTO SCROLL =================
     useEffect(() => {
@@ -37,6 +43,101 @@ const ChatBox = memo(
         return Number(msg.deletedBy) !== Number(currentUserId);
       });
     }, [messages, currentUserId]);
+
+    const normalizedKeyword = searchKeyword.trim().toLowerCase();
+
+    const getSearchableText = (msg) => {
+      return String(msg?.content || msg?.text || msg?.originalContent || "");
+    };
+
+    const scrollToMatch = (matchPos) => {
+      if (matchPos < 0 || matchPos >= matchIndexes.length) return;
+      const targetMessageIndex = matchIndexes[matchPos];
+      const targetMessage = visibleMessages[targetMessageIndex];
+      const targetId = targetMessage?._id || targetMessage?.id;
+      if (!targetId) return;
+
+      const node = messageRefs.current[targetId];
+      node?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    };
+
+    useEffect(() => {
+      if (!showSearch) {
+        setSearchKeyword("");
+        setMatchIndexes([]);
+        setActiveMatchPos(-1);
+      }
+    }, [showSearch]);
+
+    useEffect(() => {
+      if (!normalizedKeyword) {
+        setMatchIndexes([]);
+        setActiveMatchPos(-1);
+        return;
+      }
+
+      const indexes = [];
+      visibleMessages.forEach((msg, index) => {
+        const text = getSearchableText(msg).toLowerCase();
+        if (text.includes(normalizedKeyword)) {
+          indexes.push(index);
+        }
+      });
+
+      setMatchIndexes(indexes);
+
+      if (indexes.length === 0) {
+        setActiveMatchPos(-1);
+        return;
+      }
+
+      const nearestPos = indexes.length - 1;
+      setActiveMatchPos(nearestPos);
+    }, [normalizedKeyword, visibleMessages]);
+
+    useEffect(() => {
+      if (activeMatchPos >= 0) {
+        scrollToMatch(activeMatchPos);
+      }
+    }, [activeMatchPos, matchIndexes]);
+
+    const jumpPrev = () => {
+      if (matchIndexes.length === 0) return;
+      setActiveMatchPos((prev) =>
+        prev <= 0 ? matchIndexes.length - 1 : prev - 1
+      );
+    };
+
+    const jumpNext = () => {
+      if (matchIndexes.length === 0) return;
+      setActiveMatchPos((prev) =>
+        prev >= matchIndexes.length - 1 ? 0 : prev + 1
+      );
+    };
+
+    const escapeRegex = (value) =>
+      value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const renderHighlightedText = (text) => {
+      const safeText = String(text || "");
+      if (!normalizedKeyword) return safeText;
+
+      const regex = new RegExp(`(${escapeRegex(normalizedKeyword)})`, "gi");
+      const parts = safeText.split(regex);
+
+      return parts.map((part, idx) => {
+        const isHit = part.toLowerCase() === normalizedKeyword;
+        if (!isHit) return <React.Fragment key={idx}>{part}</React.Fragment>;
+        return (
+          <mark
+            key={idx}
+            className="bg-yellow-300/90 text-slate-900 px-0.5 rounded-sm"
+          >
+            {part}
+          </mark>
+        );
+      });
+    };
 
     // ================= DELETE =================
     const handleDeleteMessage = async (id) => {
@@ -71,18 +172,66 @@ const ChatBox = memo(
     // ================= HELPER =================
     const getFileUrl = (url) => {
       if (!url) return "";
+      const normalized = String(url).trim();
 
-      // fix data cũ bị dính port 5173
-      if (url.includes("localhost:5173")) {
-        return url.replace("localhost:5173", "localhost:8080");
+      if (normalized.startsWith("/")) {
+        return `${BASE_URL}${normalized}`;
       }
 
-      return url;
+      // fix data cũ bị dính port 5173
+      if (normalized.includes("localhost:5173")) {
+        return normalized.replace("localhost:5173", "localhost:8080");
+      }
+
+      // fix data từ mobile emulator
+      if (normalized.includes("10.0.2.2:8080")) {
+        return normalized.replace("10.0.2.2:8080", "localhost:8080");
+      }
+
+      return normalized;
     };
 
     // ================= RENDER =================
     return (
       <div className="h-full w-full overflow-y-auto p-4 space-y-4 bg-[#0f172a]">
+        {showSearch && (
+          <div className="sticky top-0 z-30 bg-[#0f172a]/95 backdrop-blur-sm pb-3">
+            <div className="flex items-center gap-2">
+              <input
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                placeholder="Tìm trong cuộc trò chuyện..."
+                className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none"
+              />
+              <button
+                onClick={jumpPrev}
+                disabled={matchIndexes.length === 0}
+                className="px-2.5 py-2 rounded-lg bg-slate-800 text-slate-200 disabled:opacity-40"
+              >
+                ↑
+              </button>
+              <button
+                onClick={jumpNext}
+                disabled={matchIndexes.length === 0}
+                className="px-2.5 py-2 rounded-lg bg-slate-800 text-slate-200 disabled:opacity-40"
+              >
+                ↓
+              </button>
+              <button
+                onClick={onCloseSearch}
+                className="px-2.5 py-2 rounded-lg bg-slate-800 text-slate-300"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="text-xs text-slate-400 mt-1">
+              {matchIndexes.length === 0
+                ? "Không có kết quả"
+                : `Kết quả: ${activeMatchPos + 1}/${matchIndexes.length}`}
+            </div>
+          </div>
+        )}
+
         {visibleMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-slate-500 italic">
             Bắt đầu cuộc trò chuyện...
@@ -93,17 +242,31 @@ const ChatBox = memo(
               msg.senderId || msg.sender?._id || msg.sender || msg.userId;
 
             const isMe = Number(senderId) === Number(currentUserId);
+            const isBot = Number(senderId) === 0;
             const messageId = msg._id || msg.id;
 
             return (
               <div
                 key={messageId}
-                className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+                ref={(node) => {
+                  if (node) messageRefs.current[messageId] = node;
+                }}
+                className={`flex ${
+                  isBot
+                    ? "justify-center"
+                    : isMe
+                      ? "justify-end"
+                      : "justify-start"
+                }`}
               >
                 <div
                   className={`flex flex-col ${
-                    isMe ? "items-end" : "items-start"
-                  } max-w-[75%]`}
+                    isBot
+                      ? "items-center"
+                      : isMe
+                        ? "items-end"
+                        : "items-start"
+                  } ${isBot ? "max-w-[90%]" : "max-w-[75%]"}`}
                 >
                   <div
                     onClick={(e) => {
@@ -115,11 +278,18 @@ const ChatBox = memo(
                     {/* MESSAGE */}
                     <div
                       className={`px-4 py-2 shadow-md ${
-                        isMe
-                          ? "bg-indigo-600 text-white rounded-2xl rounded-tr-none"
-                          : "bg-slate-700 text-slate-100 rounded-2xl rounded-tl-none"
+                        isBot
+                          ? "bg-emerald-950/80 border border-emerald-700/50 text-emerald-50 rounded-2xl"
+                          : isMe
+                            ? "bg-indigo-600 text-white rounded-2xl rounded-tr-none"
+                            : "bg-slate-700 text-slate-100 rounded-2xl rounded-tl-none"
                       }`}
                     >
+                      {isBot && (
+                        <div className="text-[10px] uppercase tracking-wide text-emerald-400/90 mb-1 font-medium">
+                          Trợ lý AI
+                        </div>
+                      )}
                       {msg.isRecalled ? (
                         <p className="italic text-slate-400">
                           {isMe
@@ -175,13 +345,13 @@ const ChatBox = memo(
                             )
                           ) : (
                             <div className="bg-slate-800 p-2 rounded-lg">
-                              {msg.originalContent}
+                              {renderHighlightedText(msg.originalContent)}
                             </div>
                           )}
                         </div>
                       ) : (
                         <p className="text-[15px] break-words">
-                          {msg.content || msg.text}
+                          {renderHighlightedText(msg.content || msg.text)}
                         </p>
                       )}
                     </div>
@@ -193,7 +363,7 @@ const ChatBox = memo(
                           isMe ? "right-0" : "left-0"
                         }`}
                       >
-                        {!msg.isRecalled && (
+                        {!msg.isRecalled && !isBot && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();

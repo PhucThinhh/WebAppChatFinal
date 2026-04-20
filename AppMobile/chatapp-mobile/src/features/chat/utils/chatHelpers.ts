@@ -38,12 +38,22 @@ export const extractUploadedFileUrl = (uploadRes: any) => {
         uploadRes?.result?.url ||
         "";
 
-  if (!rawUrl) return "";
+  return normalizeMobileFileUrl(rawUrl);
+};
 
-  return String(rawUrl).replace(
-    "http://localhost:8080",
-    "http://10.0.2.2:8080"
-  );
+export const normalizeMobileFileUrl = (url: string) => {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+
+  if (raw.startsWith("/")) {
+    return `http://10.0.2.2:8080${raw}`;
+  }
+
+  if (raw.includes("localhost:8080")) {
+    return raw.replace("localhost:8080", "10.0.2.2:8080");
+  }
+
+  return raw;
 };
 
 export const getCurrentUserId = (user: any) => {

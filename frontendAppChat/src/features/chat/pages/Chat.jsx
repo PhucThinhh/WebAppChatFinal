@@ -67,6 +67,7 @@ function ChatPage() {
   const [onlineUsers, setOnlineUsers] = useState(new Set());
 
   const [showMenu, setShowMenu] = useState(false);
+  const [showMessageSearch, setShowMessageSearch] = useState(false);
   const [showGroupMenu, setShowGroupMenu] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [showRemoveMemberModal, setShowRemoveMemberModal] = useState(false);
@@ -268,6 +269,7 @@ function ChatPage() {
     );
     setActiveTab("chat");
     setShowMenu(false);
+    setShowMessageSearch(false);
     setShowGroupMenu(false);
 
     if (conversation.type === "GROUP") {
@@ -1161,7 +1163,12 @@ function ChatPage() {
                 </div>
 
                 <div className="flex items-center gap-2 relative">
-                  <button className="p-2.5 rounded-full hover:bg-white/5 text-slate-400">
+                  <button
+                    onClick={() => setShowMessageSearch((prev) => !prev)}
+                    className={`p-2.5 rounded-full hover:bg-white/5 ${
+                      showMessageSearch ? "text-blue-400" : "text-slate-400"
+                    }`}
+                  >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       width="20"
@@ -1249,6 +1256,8 @@ function ChatPage() {
                   currentUserId={currentUserId}
                   setMessages={setMessages}
                   onForwardMessage={handleForwardClick}
+                  showSearch={showMessageSearch}
+                  onCloseSearch={() => setShowMessageSearch(false)}
                 />
               </div>
 

@@ -54,6 +54,7 @@ export default function ChatRoomScreen() {
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
+  const [aiMode, setAiMode] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
 
@@ -164,12 +165,16 @@ export default function ChatRoomScreen() {
   };
 
   const handleSend = () => {
-    const content = text.trim();
+    let content = text.trim();
     if (!content || !currentUserId || !roomId) return;
 
     if (isBlocked) {
       Alert.alert("Thông báo", "Bạn đang chặn người này");
       return;
+    }
+
+    if (aiMode && !content.startsWith("/ai")) {
+      content = `/ai ${content}`;
     }
 
     const payload = buildPayload({
@@ -337,6 +342,7 @@ export default function ChatRoomScreen() {
               <MessageBubble
                 item={item}
                 isMine={String(item?.senderId) === String(currentUserId)}
+                isBot={String(item?.senderId) === "0"}
                 onRecalled={loadMessages}
               />
             )}
@@ -355,6 +361,8 @@ export default function ChatRoomScreen() {
           onPickFile={handlePickFile}
           onSend={handleSend}
           disabled={isBlocked}
+          aiMode={aiMode}
+          onToggleAiMode={() => setAiMode((v) => !v)}
         />
       </KeyboardAvoidingView>
     </SafeAreaView>

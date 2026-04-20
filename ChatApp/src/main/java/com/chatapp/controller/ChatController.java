@@ -4,12 +4,14 @@ import com.chatapp.dto.SendMessageDTO;
 import com.chatapp.entity.Message;
 import com.chatapp.entity.User;
 import com.chatapp.repository.UserRepository;
+import com.chatapp.service.AIService;
 import com.chatapp.service.ChatService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.Arrays;
 import java.util.List;
 
 @RestController
@@ -19,6 +21,8 @@ public class ChatController {
 
     private final ChatService chatService;
     private final UserRepository userRepository;
+    private final AIService aiService;
+
 
     // =========================
     // SEND MESSAGE (SOCKET)
@@ -67,4 +71,5 @@ public class ChatController {
 
         chatService.deleteConversationForMe(roomId, userId);
     }
+
 }

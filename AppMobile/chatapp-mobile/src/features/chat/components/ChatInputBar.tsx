@@ -9,6 +9,9 @@ type Props = {
   onPickFile: () => void;
   onSend: () => void;
   disabled?: boolean;
+  /** Bật: gửi tin tự thêm `/ai` (backend ChatService) */
+  aiMode?: boolean;
+  onToggleAiMode?: () => void;
 };
 
 export default function ChatInputBar({
@@ -19,6 +22,8 @@ export default function ChatInputBar({
   onPickFile,
   onSend,
   disabled,
+  aiMode,
+  onToggleAiMode,
 }: Props) {
   return (
     <View style={styles.inputWrap}>
@@ -30,10 +35,26 @@ export default function ChatInputBar({
         <Text style={styles.iconText}>📎</Text>
       </TouchableOpacity>
 
+      {onToggleAiMode != null && (
+        <TouchableOpacity
+          style={[styles.iconBtn, aiMode && styles.aiBtnActive]}
+          onPress={onToggleAiMode}
+          disabled={disabled || uploading}
+        >
+          <Text style={styles.iconText}>✨</Text>
+        </TouchableOpacity>
+      )}
+
       <TextInput
         value={text}
         onChangeText={setText}
-        placeholder={disabled ? "Bạn đang chặn người này" : "Nhắn tin..."}
+        placeholder={
+          disabled
+            ? "Bạn đang chặn người này"
+            : aiMode
+              ? "Câu hỏi cho AI (gửi sẽ thêm /ai)..."
+              : "Nhắn tin..."
+        }
         placeholderTextColor="#8E8E93"
         style={styles.input}
         editable={!disabled && !uploading}
@@ -70,6 +91,9 @@ const styles = StyleSheet.create({
   },
   iconText: {
     fontSize: 18,
+  },
+  aiBtnActive: {
+    backgroundColor: "#059669",
   },
   input: {
     flex: 1,

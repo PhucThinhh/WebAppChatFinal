@@ -29,6 +29,7 @@ public class SecurityConfig {
                         // 🔓 public
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/api/chat/**").authenticated()
 
                         .requestMatchers("/ws/**").permitAll()   // ⭐ THÊM DÒNG NÀY
 
@@ -37,8 +38,6 @@ public class SecurityConfig {
 
                         // 🔥 USER + ADMIN
                         .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
-
-                        .requestMatchers("/api/chat/**").permitAll()
 
                         .requestMatchers("/uploads/**").permitAll()
 

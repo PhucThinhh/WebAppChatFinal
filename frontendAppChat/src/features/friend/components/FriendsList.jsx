@@ -1,12 +1,18 @@
 import { useEffect, useState, useMemo } from "react";
 import { getFriendsApi } from "../api/friendApi";
 
-function FriendsList({ onSelectUser, onlineUsers = new Set() }) {
+function FriendsList({ data, onSelectUser, onlineUsers = new Set() }) {
   const [friends, setFriends] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // ================= FETCH FRIENDS =================
   useEffect(() => {
+    if (data) {
+      setFriends(data); // 🔥 dùng data từ ngoài
+      setLoading(false);
+      return;
+    }
+
     const fetchFriends = async () => {
       try {
         const res = await getFriendsApi();
@@ -19,7 +25,7 @@ function FriendsList({ onSelectUser, onlineUsers = new Set() }) {
     };
 
     fetchFriends();
-  }, []);
+  }, [data]);
 
   // ================= FORMAT DATA =================
   const formatFriendData = (f) => ({

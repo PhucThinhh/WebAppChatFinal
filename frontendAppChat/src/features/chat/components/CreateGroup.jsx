@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { createGroupApi } from "../api/chatApi";
 import axiosClient from "../../../services/axiosClient";
 
+const DEFAULT_AVATAR =
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="%231e293b"/><circle cx="32" cy="24" r="12" fill="%23e2e8f0"/><path d="M12 56c4-12 14-18 20-18s16 6 20 18" fill="%23e2e8f0"/></svg>';
+
 export default function CreateGroup({ onCreated }) {
   const [groupName, setGroupName] = useState("");
   const [friends, setFriends] = useState([]);
@@ -67,6 +70,13 @@ export default function CreateGroup({ onCreated }) {
       friend?.phone ||
       `User ${getFriendId(friend, meId)}`
     );
+  };
+
+  const resolveAvatar = (avatar) => {
+    if (!avatar) return DEFAULT_AVATAR;
+    if (avatar.startsWith("data:image")) return avatar;
+    if (avatar.startsWith("http")) return avatar;
+    return `http://localhost:8080${avatar}`;
   };
 
   const toggleSelectFriend = (friend) => {
@@ -223,6 +233,21 @@ export default function CreateGroup({ onCreated }) {
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggleSelectFriend(friend)}
+                />
+                <img
+                  src={resolveAvatar(friend?.avatar)}
+                  alt={getFriendLabel(friend, meId)}
+                  onError={(e) => {
+                    e.currentTarget.src = DEFAULT_AVATAR;
+                  }}
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "9999px",
+                    objectFit: "cover",
+                    flexShrink: 0,
+                    border: "1px solid rgba(255,255,255,0.2)",
+                  }}
                 />
                 <span>{getFriendLabel(friend, meId)}</span>
               </label>

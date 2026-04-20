@@ -2,15 +2,16 @@ package com.chatapp.controller;
 
 import com.chatapp.dto.CreateGroupDTO;
 import com.chatapp.entity.Group;
+import com.chatapp.entity.GroupMember;
 import com.chatapp.service.GroupService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
-@RequestMapping("/chat/group")
+@RequestMapping("/api/chat/group")
 @RequiredArgsConstructor
 public class GroupController {
 
@@ -20,5 +21,43 @@ public class GroupController {
     public Group create(@RequestBody CreateGroupDTO dto) {
         System.out.println(">>> CONTROLLER HIT");
         return groupService.createGroup(dto);
+    }
+
+    @GetMapping("/my-groups")
+    public List<Group> getMyGroups(@RequestParam Long userId) {
+        return groupService.getGroupsByUser(userId);
+    }
+
+    @PostMapping("/add-member")
+    public void addMember(
+            @RequestParam String groupId,
+            @RequestParam Long userId,
+            Authentication authentication
+    ) {
+        Long currentUserId = Long.parseLong(authentication.getName()); // ✅ OK vì sub = "2"
+
+        groupService.addMember(groupId, userId, currentUserId);
+    }
+
+    @GetMapping("/members")
+    public List<GroupMember> getMembers(@RequestParam String groupId) {
+        return groupService.getMembers(groupId);
+    }
+
+    @DeleteMapping("/remove-member")
+    public void removeMember(
+            @RequestParam String groupId,
+            @RequestParam Long userId,
+            @RequestParam Long currentUserId
+    ) {
+        groupService.removeMember(groupId, userId, currentUserId);
+    }
+
+    @DeleteMapping("/delete")
+    public void deleteGroup(
+            @RequestParam String groupId,
+            @RequestParam Long currentUserId
+    ) {
+        groupService.deleteGroup(groupId, currentUserId);
     }
 }

@@ -50,5 +50,30 @@ export const getBlockStatusApi = (targetId) => {
 };
 
 export const createGroupApi = (data) => {
-  return axiosClient.post("http://localhost:8080/chat/group/create", data);
+  return axiosClient.post("http://localhost:8080/api/chat/group/create", data);
+};
+
+export const getMyGroupsApi = (userId) => {
+  return axiosClient.get(`/chat/group/my-groups?userId=${userId}`);
+};
+
+export const addMemberApi = (groupId, userId) => {
+  return axiosClient.post(
+    `/chat/group/add-member?groupId=${groupId}&userId=${userId}`
+  );
+};
+export const getGroupMembersApi = (groupId) => {
+  return axiosClient.get(`/chat/group/members?groupId=${groupId}`);
+};
+
+export const removeMemberApi = (groupId, userId, currentUserId) => {
+  return axiosClient.delete(
+    `/chat/group/remove-member?groupId=${groupId}&userId=${userId}&currentUserId=${currentUserId}`
+  );
+};
+
+export const deleteGroupApi = (groupId, currentUserId) => {
+  return axiosClient.delete(
+    `/chat/group/delete?groupId=${groupId}&currentUserId=${currentUserId}`
+  );
 };

@@ -50,5 +50,5 @@ export const getBlockStatusApi = (targetId) => {
 };
 
 export const createGroupApi = (data) => {
-  return axiosClient.post("/chat/group/create", data);
+  return axiosClient.post("http://localhost:8080/chat/group/create", data);
 };

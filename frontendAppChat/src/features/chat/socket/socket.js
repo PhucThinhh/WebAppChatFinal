@@ -188,6 +188,19 @@ export const subscribeUserStatus = (callback) => {
   return statusSubscription;
 };
 
+export const subscribeGroupUpdates = (userId, callback) => {
+  if (!stompClient || connectionState !== "CONNECTED" || !userId) return;
+
+  return stompClient.subscribe(`/topic/group-updates/${userId}`, (msg) => {
+    try {
+      const data = JSON.parse(msg.body || "{}");
+      callback?.(data);
+    } catch {
+      callback?.({});
+    }
+  });
+};
+
 // ================= DISCONNECT =================
 export const disconnectSocket = () => {
   stompClient?.deactivate();

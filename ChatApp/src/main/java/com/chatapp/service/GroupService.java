@@ -10,13 +10,17 @@ import com.chatapp.repository.GroupMemberRepository;
 import com.chatapp.repository.GroupRepository;
 import com.chatapp.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -27,6 +31,7 @@ public class GroupService {
     private final GroupRepository groupRepo;
     private final GroupMemberRepository memberRepo;
     private final UserRepository userRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public Group createGroup(CreateGroupDTO dto) {
 
@@ -68,6 +73,11 @@ public class GroupService {
                     .build());
         }
 
+        Set<Long> changedUsers = new HashSet<>();
+        changedUsers.add(dto.getCreatorId());
+        changedUsers.addAll(dto.getMemberIds());
+        notifyGroupChanged(changedUsers, "GROUP_CREATED", group.getId());
+
         return group;
     }
 
@@ -104,6 +114,8 @@ public class GroupService {
                 .userId(userId)
                 .role(GroupRole.MEMBER)
                 .build());
+
+        notifyGroupChanged(Set.of(userId), "GROUP_MEMBER_ADDED", groupId);
     }
 
     public List<GroupMemberDTO> getMembers(String groupId) {
@@ -155,6 +167,8 @@ public class GroupService {
                 .orElseThrow(() -> new RuntimeException("User không trong nhóm"));
 
         memberRepo.deleteByGroupIdAndUserId(groupId, targetUserId);
+
+        notifyGroupChanged(Set.of(targetUserId), "GROUP_MEMBER_REMOVED", groupId);
     }
 
     public void deleteGroup(String groupId, Long currentUserId) {
@@ -170,10 +184,16 @@ public class GroupService {
 
         // 🔥 xoá member
         List<GroupMember> members = memberRepo.findByGroupId(groupId);
+        Set<Long> notifyUsers = members.stream()
+                .map(GroupMember::getUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
         memberRepo.deleteAll(members);
 
         // 🔥 xoá group
         groupRepo.deleteById(groupId);
+
+        notifyGroupChanged(notifyUsers, "GROUP_DELETED", groupId);
     }
 
     public void updateRole(String groupId, Long targetUserId, GroupRole newRole, Long currentUserId) {
@@ -208,8 +228,13 @@ public class GroupService {
 
             // ❗ chỉ còn 1 người → xoá nhóm
             if (members.size() <= 1) {
+                Set<Long> notifyUsers = members.stream()
+                        .map(GroupMember::getUserId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
                 memberRepo.deleteAll(members);
                 groupRepo.deleteById(groupId);
+                notifyGroupChanged(notifyUsers, "GROUP_DELETED", groupId);
                 return;
             }
 
@@ -240,7 +265,26 @@ public class GroupService {
 
         // 🔥 xoá user khỏi group
         memberRepo.deleteByGroupIdAndUserId(groupId, userId);
+        notifyGroupChanged(Set.of(userId), "GROUP_MEMBER_REMOVED", groupId);
     }
 
+
+    private void notifyGroupChanged(Set<Long> userIds, String action, String groupId) {
+        if (userIds == null || userIds.isEmpty()) return;
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("action", action);
+        payload.put("groupId", groupId);
+        payload.put("timestamp", System.currentTimeMillis());
+
+        userIds.stream()
+                .filter(Objects::nonNull)
+                .forEach(uid ->
+                        messagingTemplate.convertAndSend(
+                                "/topic/group-updates/" + uid,
+                                payload
+                        )
+                );
+    }
 
 }

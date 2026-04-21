@@ -42,6 +42,7 @@
   import {
     connectSocket,
     sendMessageSocket,
+  subscribeGroupUpdates,
     subscribeUserStatus,
   } from "../socket/socket";
 
@@ -300,6 +301,45 @@
 
       let statusSub = null;
       let listSub = null;
+    let groupSub = null;
+    const userId = Number(user.id);
+
+    const syncMyGroups = async () => {
+      try {
+        const res = await getMyGroupsApi(userId);
+
+        const groupConversations = res.data.map((group) => ({
+          id: `group_${group.id}`,
+          type: "GROUP",
+          name: group.name,
+          avatar: DEFAULT_AVATAR,
+          roomId: `group_${group.id}`,
+          unreadCount: 0,
+          targetGroup: {
+            id: group.id,
+            name: group.name,
+          },
+        }));
+
+        setConversations((prev) => {
+          const privateConversations = prev.filter((c) => c.type !== "GROUP");
+          const prevUnread = new Map(
+            prev
+              .filter((c) => c.type === "GROUP")
+              .map((c) => [c.id, Number(c.unreadCount || 0)])
+          );
+
+          const mergedGroups = groupConversations.map((g) => ({
+            ...g,
+            unreadCount: prevUnread.get(g.id) ?? 0,
+          }));
+
+          return [...mergedGroups, ...privateConversations];
+        });
+      } catch (err) {
+        console.error("Sync group realtime lỗi:", err);
+      }
+    };
 
       connectSocket(user.id, () => {
         listSub = subscribeOnlineList((list) => {
@@ -324,11 +364,17 @@
             return newSet;
           });
         });
+
+      syncMyGroups();
+      groupSub = subscribeGroupUpdates(userId, () => {
+        syncMyGroups();
+      });
       });
 
       return () => {
         statusSub?.unsubscribe();
         listSub?.unsubscribe();
+      groupSub?.unsubscribe();
       };
     }, [user?.id]);
 

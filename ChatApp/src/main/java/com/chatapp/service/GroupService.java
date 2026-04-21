@@ -5,9 +5,11 @@ import com.chatapp.dto.GroupMemberDTO;
 import com.chatapp.entity.Group;
 import com.chatapp.entity.GroupMember;
 import com.chatapp.entity.GroupRole;
+import com.chatapp.entity.Message;
 import com.chatapp.entity.User;
 import com.chatapp.repository.GroupMemberRepository;
 import com.chatapp.repository.GroupRepository;
+import com.chatapp.repository.MessageRepository;
 import com.chatapp.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -31,6 +33,7 @@ public class GroupService {
     private final GroupRepository groupRepo;
     private final GroupMemberRepository memberRepo;
     private final UserRepository userRepository;
+    private final MessageRepository messageRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
     public Group createGroup(CreateGroupDTO dto) {
@@ -71,7 +74,17 @@ public class GroupService {
                     .userId(id)
                     .role(GroupRole.MEMBER)
                     .build());
+
+            publishGroupSystemMessage(
+                    group.getId(),
+                    getDisplayName(id) + " đã được thêm vào nhóm bởi " + getDisplayName(dto.getCreatorId())
+            );
         }
+
+        publishGroupSystemMessage(
+                group.getId(),
+                getDisplayName(dto.getCreatorId()) + " đã tạo nhóm"
+        );
 
         Set<Long> changedUsers = new HashSet<>();
         changedUsers.add(dto.getCreatorId());
@@ -114,6 +127,11 @@ public class GroupService {
                 .userId(userId)
                 .role(GroupRole.MEMBER)
                 .build());
+
+        publishGroupSystemMessage(
+                groupId,
+                getDisplayName(userId) + " đã được thêm vào nhóm bởi " + getDisplayName(currentUserId)
+        );
 
         notifyGroupChanged(Set.of(userId), "GROUP_MEMBER_ADDED", groupId);
     }
@@ -166,7 +184,15 @@ public class GroupService {
         GroupMember target = memberRepo.findByGroupIdAndUserId(groupId, targetUserId)
                 .orElseThrow(() -> new RuntimeException("User không trong nhóm"));
 
+        String targetName = getDisplayName(targetUserId);
+        String actorName = getDisplayName(currentUserId);
+
         memberRepo.deleteByGroupIdAndUserId(groupId, targetUserId);
+
+        publishGroupSystemMessage(
+                groupId,
+                targetName + " đã bị xóa khỏi nhóm bởi " + actorName
+        );
 
         notifyGroupChanged(Set.of(targetUserId), "GROUP_MEMBER_REMOVED", groupId);
     }
@@ -265,6 +291,10 @@ public class GroupService {
 
         // 🔥 xoá user khỏi group
         memberRepo.deleteByGroupIdAndUserId(groupId, userId);
+        publishGroupSystemMessage(
+                groupId,
+                getDisplayName(userId) + " đã rời nhóm"
+        );
         notifyGroupChanged(Set.of(userId), "GROUP_MEMBER_REMOVED", groupId);
     }
 
@@ -285,6 +315,29 @@ public class GroupService {
                                 payload
                         )
                 );
+    }
+
+    private String getDisplayName(Long userId) {
+        if (userId == null) return "Người dùng";
+        return userRepository.findById(userId)
+                .map(User::getUsername)
+                .filter(name -> name != null && !name.isBlank())
+                .orElse("User " + userId);
+    }
+
+    private void publishGroupSystemMessage(String groupId, String text) {
+        if (groupId == null || groupId.isBlank() || text == null || text.isBlank()) return;
+
+        Message systemMsg = Message.builder()
+                .senderId(0L)
+                .roomId("group_" + groupId)
+                .content(text)
+                .type("SYSTEM")
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        Message saved = messageRepository.save(systemMsg);
+        messagingTemplate.convertAndSend("/topic/chat/group_" + groupId, saved);
     }
 
 }

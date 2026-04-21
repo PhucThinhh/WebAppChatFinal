@@ -304,7 +304,7 @@
     let groupSub = null;
     const userId = Number(user.id);
 
-    const syncMyGroups = async () => {
+    const syncMyGroups = async (focusGroupId = null) => {
       try {
         const res = await getMyGroupsApi(userId);
 
@@ -333,6 +333,15 @@
             ...g,
             unreadCount: prevUnread.get(g.id) ?? 0,
           }));
+
+          if (focusGroupId) {
+            const targetRoomId = `group_${focusGroupId}`;
+            const idx = mergedGroups.findIndex((g) => g.id === targetRoomId);
+            if (idx > 0) {
+              const [picked] = mergedGroups.splice(idx, 1);
+              mergedGroups.unshift(picked);
+            }
+          }
 
           return [...mergedGroups, ...privateConversations];
         });
@@ -366,8 +375,26 @@
         });
 
       syncMyGroups();
-      groupSub = subscribeGroupUpdates(userId, () => {
-        syncMyGroups();
+      groupSub = subscribeGroupUpdates(userId, (event) => {
+        const action = String(event?.action || "");
+        const groupId = String(event?.groupId || "").trim();
+        const roomId = groupId ? `group_${groupId}` : null;
+
+        syncMyGroups(groupId || null);
+        if (roomId) {
+          moveConversationToTop(roomId);
+        }
+
+        const actionMessage = {
+          GROUP_CREATED: "Bạn vừa được thêm vào một nhóm mới",
+          GROUP_MEMBER_ADDED: "Bạn vừa được thêm vào nhóm",
+          GROUP_MEMBER_REMOVED: "Bạn đã rời nhóm / bị xoá khỏi nhóm",
+          GROUP_DELETED: "Nhóm đã được giải tán",
+        }[action];
+
+        if (actionMessage) {
+          toast.info(actionMessage);
+        }
       });
       });
 

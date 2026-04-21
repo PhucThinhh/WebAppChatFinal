@@ -243,6 +243,7 @@ const ChatBox = memo(
 
             const isMe = Number(senderId) === Number(currentUserId);
             const isBot = Number(senderId) === 0;
+            const isSystem = String(msg?.type || "").toUpperCase() === "SYSTEM";
             const messageId = msg._id || msg.id;
 
             return (
@@ -252,7 +253,9 @@ const ChatBox = memo(
                   if (node) messageRefs.current[messageId] = node;
                 }}
                 className={`flex ${
-                  isBot
+                  isSystem
+                    ? "justify-center"
+                    : isBot
                     ? "justify-center"
                     : isMe
                       ? "justify-end"
@@ -261,31 +264,35 @@ const ChatBox = memo(
               >
                 <div
                   className={`flex flex-col ${
-                    isBot
+                    isSystem
+                      ? "items-center"
+                      : isBot
                       ? "items-center"
                       : isMe
                         ? "items-end"
                         : "items-start"
-                  } ${isBot ? "max-w-[90%]" : "max-w-[75%]"}`}
+                  } ${isSystem || isBot ? "max-w-[90%]" : "max-w-[75%]"}`}
                 >
                   <div
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedMessageId(messageId);
+                      if (!isSystem) setSelectedMessageId(messageId);
                     }}
                     className="relative"
                   >
                     {/* MESSAGE */}
                     <div
                       className={`px-4 py-2 shadow-md ${
-                        isBot
+                        isSystem
+                          ? "bg-slate-800/60 border border-slate-600/50 text-slate-300 rounded-full text-sm italic"
+                          : isBot
                           ? "bg-emerald-950/80 border border-emerald-700/50 text-emerald-50 rounded-2xl"
                           : isMe
                             ? "bg-indigo-600 text-white rounded-2xl rounded-tr-none"
                             : "bg-slate-700 text-slate-100 rounded-2xl rounded-tl-none"
                       }`}
                     >
-                      {isBot && (
+                      {isBot && !isSystem && (
                         <div className="text-[10px] uppercase tracking-wide text-emerald-400/90 mb-1 font-medium">
                           Trợ lý AI
                         </div>
@@ -357,7 +364,7 @@ const ChatBox = memo(
                     </div>
 
                     {/* MENU */}
-                    {selectedMessageId === messageId && (
+                    {selectedMessageId === messageId && !isSystem && (
                       <div
                         className={`absolute top-full mt-2 z-20 flex gap-2 ${
                           isMe ? "right-0" : "left-0"

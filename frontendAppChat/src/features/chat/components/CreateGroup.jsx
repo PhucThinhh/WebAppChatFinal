@@ -114,8 +114,8 @@ export default function CreateGroup({ onCreated }) {
         return;
       }
 
-      if (!selectedFriends.length) {
-        alert("Vui lòng chọn ít nhất 1 thành viên");
+      if (selectedFriends.length < 2) {
+        alert("Vui lòng chọn ít nhất 2 thành viên");
         return;
       }
 

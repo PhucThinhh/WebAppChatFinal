@@ -62,6 +62,7 @@ export const addMemberApi = (groupId, userId) => {
     `/chat/group/add-member?groupId=${groupId}&userId=${userId}`
   );
 };
+/** Trả về mảng GroupMemberDTO: { userId, username, avatar, role } */
 export const getGroupMembersApi = (groupId) => {
   return axiosClient.get(`/chat/group/members?groupId=${groupId}`);
 };
@@ -81,5 +82,11 @@ export const deleteGroupApi = (groupId, currentUserId) => {
 export const updateRoleApi = (groupId, userId, role, currentUserId) => {
   return axiosClient.put(
     `/chat/group/update-role?groupId=${groupId}&userId=${userId}&role=${role}&currentUserId=${currentUserId}`
+  );
+};
+
+export const leaveGroupApi = (groupId, userId) => {
+  return axiosClient.delete(
+    `/chat/group/leave?groupId=${groupId}&userId=${userId}`
   );
 };

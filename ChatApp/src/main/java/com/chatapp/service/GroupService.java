@@ -1,16 +1,24 @@
 package com.chatapp.service;
 
 import com.chatapp.dto.CreateGroupDTO;
+import com.chatapp.dto.GroupMemberDTO;
 import com.chatapp.entity.Group;
 import com.chatapp.entity.GroupMember;
 import com.chatapp.entity.GroupRole;
+import com.chatapp.entity.User;
 import com.chatapp.repository.GroupMemberRepository;
 import com.chatapp.repository.GroupRepository;
+import com.chatapp.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Random;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -18,8 +26,14 @@ public class GroupService {
 
     private final GroupRepository groupRepo;
     private final GroupMemberRepository memberRepo;
+    private final UserRepository userRepository;
 
     public Group createGroup(CreateGroupDTO dto) {
+
+        // 🔥 CHECK MIN 3 NGƯỜI (creator + 2 member)
+        if (dto.getMemberIds() == null || dto.getMemberIds().size() < 2) {
+            throw new RuntimeException("Nhóm phải có ít nhất 3 thành viên");
+        }
 
         // 1. tạo group
         Group group = groupRepo.save(
@@ -35,7 +49,7 @@ public class GroupService {
             throw new RuntimeException("Group ID null - Mongo chưa generate");
         }
 
-        // 2. thêm creator (ADMIN)
+        // 2. thêm creator (OWNER)
         memberRepo.save(GroupMember.builder()
                 .groupId(group.getId())
                 .userId(dto.getCreatorId())
@@ -43,17 +57,15 @@ public class GroupService {
                 .build());
 
         // 3. thêm member
-        if (dto.getMemberIds() != null) {
-            for (Long id : dto.getMemberIds()) {
+        for (Long id : dto.getMemberIds()) {
 
-                if (id.equals(dto.getCreatorId())) continue;
+            if (id.equals(dto.getCreatorId())) continue;
 
-                memberRepo.save(GroupMember.builder()
-                        .groupId(group.getId())
-                        .userId(id)
-                        .role(GroupRole.MEMBER)
-                        .build());
-            }
+            memberRepo.save(GroupMember.builder()
+                    .groupId(group.getId())
+                    .userId(id)
+                    .role(GroupRole.MEMBER)
+                    .build());
         }
 
         return group;
@@ -94,8 +106,33 @@ public class GroupService {
                 .build());
     }
 
-    public List<GroupMember> getMembers(String groupId) {
-        return memberRepo.findByGroupId(groupId);
+    public List<GroupMemberDTO> getMembers(String groupId) {
+
+        List<GroupMember> members = memberRepo.findByGroupId(groupId);
+        if (members.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> userIds = members.stream()
+                .map(GroupMember::getUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        Map<Long, User> userById = userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+
+        return members.stream().map(m -> {
+            Long uid = m.getUserId();
+            User user = uid != null ? userById.get(uid) : null;
+
+            return new GroupMemberDTO(
+                    uid,
+                    user != null ? user.getUsername() : "User " + uid,
+                    user != null ? user.getAvatar() : "/default-avatar.png",
+                    m.getRole().name()
+            );
+        }).toList();
     }
 
     public void removeMember(String groupId, Long targetUserId, Long currentUserId) {
@@ -122,16 +159,16 @@ public class GroupService {
 
     public void deleteGroup(String groupId, Long currentUserId) {
 
-        // 🔥 check group tồn tại
-        Group group = groupRepo.findById(groupId)
-                .orElseThrow(() -> new RuntimeException("Group không tồn tại"));
+        // 🔥 check membership
+        GroupMember me = memberRepo.findByGroupIdAndUserId(groupId, currentUserId)
+                .orElseThrow(() -> new RuntimeException("Bạn không thuộc nhóm"));
 
-        // 🔥 chỉ creator mới được xoá
-        if (!group.getCreatedBy().equals(currentUserId)) {
-            throw new RuntimeException("Bạn không có quyền giải tán nhóm");
+        // 🔥 chỉ OWNER mới được xoá
+        if (me.getRole() != GroupRole.OWNER) {
+            throw new RuntimeException("Chỉ chủ nhóm mới được giải tán");
         }
 
-        // 🔥 xoá toàn bộ member
+        // 🔥 xoá member
         List<GroupMember> members = memberRepo.findByGroupId(groupId);
         memberRepo.deleteAll(members);
 
@@ -158,4 +195,52 @@ public class GroupService {
         target.setRole(newRole);
         memberRepo.save(target);
     }
+
+    public void leaveGroup(String groupId, Long userId) {
+
+        GroupMember me = memberRepo.findByGroupIdAndUserId(groupId, userId)
+                .orElseThrow(() -> new RuntimeException("Không thuộc nhóm"));
+
+        // 🔥 nếu là OWNER
+        if (me.getRole() == GroupRole.OWNER) {
+
+            List<GroupMember> members = memberRepo.findByGroupId(groupId);
+
+            // ❗ chỉ còn 1 người → xoá nhóm
+            if (members.size() <= 1) {
+                memberRepo.deleteAll(members);
+                groupRepo.deleteById(groupId);
+                return;
+            }
+
+            // 🔥 loại bỏ chính mình
+            List<GroupMember> others = members.stream()
+                    .filter(m -> !m.getUserId().equals(userId))
+                    .toList();
+
+            GroupMember newOwner;
+
+            // ✅ ƯU TIÊN ADMIN
+            List<GroupMember> admins = others.stream()
+                    .filter(m -> m.getRole() == GroupRole.ADMIN)
+                    .toList();
+
+            if (!admins.isEmpty()) {
+                // 👉 chọn random admin
+                newOwner = admins.get(new Random().nextInt(admins.size()));
+            } else {
+                // 👉 không có admin → chọn random member
+                newOwner = others.get(new Random().nextInt(others.size()));
+            }
+
+            // 🔥 set OWNER mới
+            newOwner.setRole(GroupRole.OWNER);
+            memberRepo.save(newOwner);
+        }
+
+        // 🔥 xoá user khỏi group
+        memberRepo.deleteByGroupIdAndUserId(groupId, userId);
+    }
+
+
 }

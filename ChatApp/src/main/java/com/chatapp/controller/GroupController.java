@@ -1,6 +1,7 @@
 package com.chatapp.controller;
 
 import com.chatapp.dto.CreateGroupDTO;
+import com.chatapp.dto.GroupMemberDTO;
 import com.chatapp.entity.Group;
 import com.chatapp.entity.GroupMember;
 import com.chatapp.entity.GroupRole;
@@ -41,7 +42,7 @@ public class GroupController {
     }
 
     @GetMapping("/members")
-    public List<GroupMember> getMembers(@RequestParam String groupId) {
+    public List<GroupMemberDTO> getMembers(@RequestParam String groupId) {
         return groupService.getMembers(groupId);
     }
 
@@ -70,5 +71,13 @@ public class GroupController {
             @RequestParam Long currentUserId
     ) {
         groupService.updateRole(groupId, userId, role, currentUserId);
+    }
+
+    @DeleteMapping("/leave")
+    public void leaveGroup(
+            @RequestParam String groupId,
+            @RequestParam Long userId
+    ) {
+        groupService.leaveGroup(groupId, userId);
     }
 }

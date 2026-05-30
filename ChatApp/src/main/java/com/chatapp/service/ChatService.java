@@ -24,6 +24,8 @@ public class ChatService {
     private final ConversationStateRepository conversationRepository;
     private final BlockedService blockedService;
     private final GroupMemberRepository memberRepo;
+    private final AIService aiService;
+    private final ToxicModerationService toxicModerationService;
 
     // =========================
     // SEND MESSAGE
@@ -33,16 +35,14 @@ public class ChatService {
         // 🔥 CHẶN NGAY
         if (blockedService.isEitherBlocked(dto.getSenderId(), dto.getReceiverId())) {
             System.out.println("🚫 BLOCKED MESSAGE");
-            return null; // ❌ KHÔNG gửi gì cả
+            return null;
         }
 
         String roomId;
 
         if (dto.getRoomId() != null && dto.getRoomId().startsWith("group_")) {
-            // 🔥 GROUP
-            roomId = dto.getRoomId();
 
-            // ❗ check member
+            roomId = dto.getRoomId();
             String groupId = roomId.replace("group_", "");
 
             boolean isMember = memberRepo
@@ -53,10 +53,33 @@ public class ChatService {
             }
 
         } else {
-            // 🔥 1vs1 (giữ nguyên)
             roomId = generateRoomId(dto.getSenderId(), dto.getReceiverId());
         }
 
+        String textContent = dto.getContent() != null ? dto.getContent().trim() : "";
+        boolean isTextMessage = dto.getType() == null || "TEXT".equalsIgnoreCase(dto.getType());
+        boolean isAiCommand = textContent.startsWith("/ai");
+
+        if (isTextMessage && !isAiCommand && toxicModerationService.isToxic(textContent)) {
+            Message warning = Message.builder()
+                    .id("violation-" + System.currentTimeMillis())
+                    .senderId(dto.getSenderId())
+                    .receiverId(dto.getReceiverId())
+                    .roomId(roomId)
+                    .content(toxicModerationService.getViolationMessage())
+                    .type("VIOLATION")
+                    .createdAt(LocalDateTime.now())
+                    .build();
+
+            messagingTemplate.convertAndSend(
+                    "/topic/chat/" + roomId + "/moderation/" + dto.getSenderId(),
+                    warning
+            );
+
+            return null;
+        }
+
+        // 🔥 SAVE USER MESSAGE
         Message message = Message.builder()
                 .senderId(dto.getSenderId())
                 .receiverId(dto.getReceiverId())
@@ -66,24 +89,46 @@ public class ChatService {
                 .fileUrl(dto.getFileUrl())
                 .isDeleted(false)
                 .isRecalled(false)
-                .originalSenderId(
-                        "FORWARD".equals(dto.getType()) ? dto.getOriginalSenderId() : null
-                )
-                .originalContent(
-                        "FORWARD".equals(dto.getType()) ? dto.getOriginalContent() : null
-                )
-                .originalMessageId(
-                        "FORWARD".equals(dto.getType()) ? dto.getOriginalMessageId() : null
-                )
                 .createdAt(LocalDateTime.now())
                 .build();
 
         Message saved = messageRepository.save(message);
 
+        // 🔥 GỬI REALTIME USER
         messagingTemplate.convertAndSend(
                 "/topic/chat/" + roomId,
                 saved
         );
+
+        // =========================
+        // 🤖 AI: tin nhắn bắt đầu bằng "/ai" → gọi AIService, bot senderId = 0
+        // =========================
+        if (textContent.startsWith("/ai")) {
+            String question = textContent.length() > 3
+                    ? textContent.substring(3).trim()
+                    : "";
+
+            if (question.isEmpty()) {
+                question = "Hãy trả lời thân thiện bằng tiếng Việt";
+            }
+
+            String aiReply = aiService.askAI(question);
+
+            Message botMsg = Message.builder()
+                    .senderId(0L)
+                    .roomId(roomId)
+                    .content(aiReply)
+                    .type("TEXT")
+                    .createdAt(LocalDateTime.now())
+                    .build();
+
+            messageRepository.save(botMsg);
+
+            messagingTemplate.convertAndSend(
+                    "/topic/chat/" + roomId,
+                    botMsg
+            );
+        }
 
         return saved;
     }

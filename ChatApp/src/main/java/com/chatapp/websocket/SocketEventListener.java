@@ -1,6 +1,7 @@
 package com.chatapp.websocket;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import com.chatapp.service.OnlineUserService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
@@ -8,69 +9,66 @@ import org.springframework.web.socket.messaging.SessionConnectedEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
+@RequiredArgsConstructor
 public class SocketEventListener {
 
-    @Autowired
-    private SimpMessagingTemplate messagingTemplate;
+    private final SimpMessagingTemplate messagingTemplate;
+    private final OnlineUserService onlineUserService;
+    private final Map<String, String> sessionUsers = new ConcurrentHashMap<>();
 
-    private final Set<String> onlineUsers = ConcurrentHashMap.newKeySet();
-
-    // ================= CONNECT =================
     @EventListener
     public void handleConnect(SessionConnectedEvent event) {
-
         if (event.getUser() == null) return;
 
         String userId = event.getUser().getName();
+        Object sessionId = event.getMessage().getHeaders().get("simpSessionId");
+        if (sessionId != null) {
+            sessionUsers.put(sessionId.toString(), userId);
+        }
 
-        onlineUsers.add(userId);
+        boolean firstConnection = onlineUserService.connect(userId);
 
-        // 🔥 gửi trạng thái user vừa online
-        messagingTemplate.convertAndSend(
-                "/topic/users/status",
-                Map.of(
-                        "userId", userId,
-                        "status", "ONLINE"
-                )
-        );
+        if (firstConnection) {
+            messagingTemplate.convertAndSend(
+                    "/topic/users/status",
+                    Map.of("userId", userId, "status", "ONLINE")
+            );
+        }
 
-        // 🔥 (OPTIONAL) gửi full list online cho FE sync lại
         messagingTemplate.convertAndSend(
                 "/topic/users/list",
-                onlineUsers
+                onlineUserService.getOnlineUsers()
         );
 
-        System.out.println("🟢 ONLINE: " + userId);
+        System.out.println("ONLINE: " + userId);
     }
 
-    // ================= DISCONNECT =================
     @EventListener
     public void handleDisconnect(SessionDisconnectEvent event) {
+        String userId = event.getUser() != null
+                ? event.getUser().getName()
+                : sessionUsers.get(event.getSessionId());
 
-        if (event.getUser() == null) return;
+        if (userId == null) return;
 
-        String userId = event.getUser().getName();
+        sessionUsers.remove(event.getSessionId());
+        boolean lastConnection = onlineUserService.disconnect(userId);
 
-        onlineUsers.remove(userId);
-
-        // 🔥 gửi OFFLINE
-        messagingTemplate.convertAndSend(
-                "/topic/users/status",
-                Map.of(
-                        "userId", userId,
-                        "status", "OFFLINE"
-                )
-        );
+        if (lastConnection) {
+            messagingTemplate.convertAndSend(
+                    "/topic/users/status",
+                    Map.of("userId", userId, "status", "OFFLINE")
+            );
+        }
 
         messagingTemplate.convertAndSend(
                 "/topic/users/list",
-                onlineUsers
+                onlineUserService.getOnlineUsers()
         );
 
-        System.out.println("🔴 OFFLINE: " + userId);
+        System.out.println("OFFLINE: " + userId);
     }
 }

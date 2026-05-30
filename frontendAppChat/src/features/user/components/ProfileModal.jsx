@@ -3,6 +3,7 @@ import Cropper from "react-easy-crop";
 import { FaCamera } from "react-icons/fa";
 import { getMeApi, uploadAvatarApi, uploadCoverApi } from "../api/userApi";
 import EditProfileModal from "./EditProfileModal";
+import { getImageUrl } from "../../../utils/imageUrl";
 
 const DEFAULT_COVER_URL =
   "https://images.unsplash.com/photo-1596701062351-86f84cc896c1?q=80&w=1000";
@@ -119,12 +120,12 @@ function ProfileModal({ onClose, refreshUser }) {
 
   return (
     <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-[999] p-4">
-      <div className="w-full max-w-[400px] bg-[#1e2124] rounded-lg overflow-hidden text-white shadow-2xl">
+      <div className="profile-card-light">
         {/* HEADER */}
-        <div className="p-3 px-4 flex justify-between items-center border-b border-[#333]">
+        <div className="profile-card-header">
           <span className="font-semibold">Thông tin tài khoản</span>
           <span
-            className="cursor-pointer text-[#b0b3b8] text-lg hover:text-white transition-colors"
+            className="cursor-pointer text-slate-400 text-lg hover:text-blue-600 transition-colors"
             onClick={onClose}
           >
             ✖
@@ -134,11 +135,11 @@ function ProfileModal({ onClose, refreshUser }) {
         {/* COVER PHOTO */}
         <div
           className="h-40 bg-cover bg-center relative cursor-pointer group"
-          style={{ backgroundImage: `url(${user.cover || DEFAULT_COVER_URL})` }}
+          style={{ backgroundImage: `url(${getImageUrl(user.cover) || DEFAULT_COVER_URL})` }}
           onClick={() => coverRef.current.click()}
         >
           <div className="absolute bottom-3 right-3 bg-black/50 p-2 rounded-full border border-white/20 group-hover:bg-black/70 transition-all">
-            <FaCamera size={14} className="text-white" />
+            <FaCamera size={14} className="text-slate-900" />
           </div>
         </div>
 
@@ -149,12 +150,15 @@ function ProfileModal({ onClose, refreshUser }) {
             onClick={() => avatarRef.current.click()}
           >
             <img
-              src={user.avatar || DEFAULT_AVATAR_URL}
-              className="w-[100px] h-[100px] rounded-full border-4 border-[#1e2124] object-cover shadow-lg"
+              src={getImageUrl(user.avatar) || DEFAULT_AVATAR_URL}
+              className="w-[100px] h-[100px] rounded-full border-4 border-white object-cover shadow-lg bg-slate-100"
               alt="avatar"
+              onError={(e) => {
+                e.currentTarget.src = DEFAULT_AVATAR_URL;
+              }}
             />
-            <div className="absolute bottom-1 right-1 bg-[#2a2e33] rounded-full p-1.5 border-2 border-[#1e2124] group-hover:bg-[#3a3f45] transition-all">
-              <FaCamera size={12} className="text-white" />
+            <div className="absolute bottom-1 right-1 bg-blue-600 rounded-full p-1.5 border-2 border-white group-hover:bg-blue-700 transition-all">
+              <FaCamera size={12} className="text-slate-900" />
             </div>
           </div>
           <div className="ml-4 pb-1">
@@ -166,30 +170,30 @@ function ProfileModal({ onClose, refreshUser }) {
 
         {/* INFO SECTION */}
         <div className="px-5">
-          <h4 className="text-white mb-4 text-base font-medium">
+          <h4 className="text-slate-900 mb-4 text-base font-semibold">
             Thông tin cá nhân
           </h4>
-          <div className="grid grid-cols-[1fr_1.5fr] gap-2.5 mb-2.5 text-[#b0b3b8] text-sm">
+          <div className="grid grid-cols-[1fr_1.5fr] gap-2.5 mb-2.5 text-slate-500 text-sm">
             <span>Giới tính</span>
-            <span className="text-white">{renderGender(user.gender)}</span>
+            <span className="text-slate-900">{renderGender(user.gender)}</span>
             <span>Ngày sinh</span>
-            <span className="text-white">
+            <span className="text-slate-900">
               {user.birthday || "01 tháng 01, 2007"}
             </span>
             <span>Điện thoại</span>
-            <span className="text-white">
+            <span className="text-slate-900">
               {user.phone || "+84 947 579 831"}
             </span>
           </div>
-          <p className="text-[12px] text-[#8a8d91] mt-4 leading-relaxed mb-5">
+          <p className="text-[12px] text-slate-500 mt-4 leading-relaxed mb-5">
             Chỉ bạn bè có lưu số của bạn trong danh bạ máy xem được số này
           </p>
         </div>
 
         {/* UPDATE BUTTON */}
-        <div className="p-5 pt-4 border-t border-[#333]">
+        <div className="p-5 pt-4 border-t border-slate-100">
           <button
-            className="w-full flex items-center justify-center py-2.5 bg-transparent border border-[#3e4042] text-white rounded-full font-medium text-[15px] hover:bg-[#3e4042] transition-colors"
+            className="w-full flex items-center justify-center py-2.5 bg-white border border-slate-200 text-slate-800 rounded-full font-semibold text-[15px] hover:bg-blue-50 hover:border-blue-200 transition-colors"
             onClick={() => setShowEdit(true)}
           >
             <span className="mr-2 text-base">✎</span> Cập nhật

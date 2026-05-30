@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { createGroupApi } from "../api/chatApi";
 import axiosClient from "../../../services/axiosClient";
+import { toast } from "react-toastify";
+import { getImageUrl } from "../../../utils/imageUrl";
+
+const DEFAULT_AVATAR =
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="%231e293b"/><circle cx="32" cy="24" r="12" fill="%23e2e8f0"/><path d="M12 56c4-12 14-18 20-18s16 6 20 18" fill="%23e2e8f0"/></svg>';
 
 export default function CreateGroup({ onCreated }) {
   const [groupName, setGroupName] = useState("");
@@ -69,6 +74,10 @@ export default function CreateGroup({ onCreated }) {
     );
   };
 
+  const resolveAvatar = (avatar) => {
+    return getImageUrl(avatar) || DEFAULT_AVATAR;
+  };
+
   const toggleSelectFriend = (friend) => {
     if (!currentUser?.id) return;
 
@@ -103,8 +112,8 @@ export default function CreateGroup({ onCreated }) {
         return;
       }
 
-      if (!selectedFriends.length) {
-        alert("Vui lòng chọn ít nhất 1 thành viên");
+      if (selectedFriends.length < 2) {
+        alert("Vui lòng chọn ít nhất 2 thành viên");
         return;
       }
 
@@ -139,7 +148,7 @@ export default function CreateGroup({ onCreated }) {
       const res = await createGroupApi(payload);
 
       console.log("TẠO NHÓM THÀNH CÔNG:", res.data);
-      alert("Tạo nhóm thành công");
+      toast.success("Tạo nhóm thành công! 🎉");
 
       setGroupName("");
       setSelectedFriends([]);
@@ -160,9 +169,13 @@ export default function CreateGroup({ onCreated }) {
   return (
     <div
       style={{
-        padding: "12px",
-        borderTop: "1px solid rgba(255,255,255,0.08)",
-        background: "rgba(0,0,0,0.08)",
+        margin: "18px 16px",
+        padding: "18px",
+        border: "1px solid rgba(37, 99, 235, 0.14)",
+        borderRadius: "18px",
+        background: "rgba(255,255,255,0.88)",
+        boxShadow: "0 18px 45px rgba(15,23,42,0.08)",
+        backdropFilter: "blur(14px)",
       }}
     >
       <div style={{ marginBottom: "10px" }}>
@@ -174,12 +187,13 @@ export default function CreateGroup({ onCreated }) {
           style={{
             width: "100%",
             height: "42px",
-            borderRadius: "8px",
-            border: "1px solid rgba(255,255,255,0.15)",
-            background: "rgba(255,255,255,0.06)",
-            color: "#fff",
-            padding: "0 12px",
+            borderRadius: "12px",
+            border: "1px solid rgba(37,99,235,0.18)",
+            background: "#ffffff",
+            color: "#0f172a",
+            padding: "0 14px",
             outline: "none",
+            fontWeight: "700",
           }}
         />
       </div>
@@ -189,13 +203,14 @@ export default function CreateGroup({ onCreated }) {
           maxHeight: "180px",
           overflowY: "auto",
           marginBottom: "10px",
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: "8px",
+          border: "1px solid rgba(15,23,42,0.08)",
+          borderRadius: "14px",
           padding: "8px",
+          background: "#f8fafc",
         }}
       >
         {friends.length === 0 ? (
-          <div style={{ color: "#cbd5e1", fontSize: "14px" }}>
+          <div style={{ color: "#64748b", fontSize: "14px" }}>
             Chưa có bạn bè để chọn
           </div>
         ) : (
@@ -215,14 +230,30 @@ export default function CreateGroup({ onCreated }) {
                   padding: "8px",
                   borderRadius: "8px",
                   cursor: "pointer",
-                  background: checked ? "rgba(22,119,255,0.15)" : "transparent",
-                  color: "#fff",
+                  background: checked ? "rgba(22,119,255,0.12)" : "transparent",
+                  color: "#0f172a",
+                  fontWeight: 700,
                 }}
               >
                 <input
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggleSelectFriend(friend)}
+                />
+                <img
+                  src={resolveAvatar(friend?.avatar)}
+                  alt={getFriendLabel(friend, meId)}
+                  onError={(e) => {
+                    e.currentTarget.src = DEFAULT_AVATAR;
+                  }}
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "9999px",
+                    objectFit: "cover",
+                    flexShrink: 0,
+                    border: "1px solid rgba(255,255,255,0.2)",
+                  }}
                 />
                 <span>{getFriendLabel(friend, meId)}</span>
               </label>

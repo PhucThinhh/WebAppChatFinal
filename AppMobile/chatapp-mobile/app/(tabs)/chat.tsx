@@ -1,99 +1,242 @@
-import { Ionicons } from "@expo/vector-icons";
-import React from "react";
+import React, { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
-  SafeAreaView,
+  Image,
   StatusBar,
   StyleSheet,
-  TextInput,
+  Text,
+  TouchableOpacity,
   View,
 } from "react-native";
-import ChatItem from "../../src/features/chat/components/ChatItem";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect, useRouter } from "expo-router";
+import { getFriendsApi, getMeApi } from "../../src/features/contacts/api/contactsApi";
+import { getCurrentUserId } from "../../src/features/chat/utils/chatHelpers";
+import CreateGroupModal from "../../src/features/chat/components/CreateGroupModal";
 
 export default function ChatScreen() {
-  const chatData = [
-    {
-      id: "1",
-      name: "My Documents",
-      lastMessage: "Bạn: <% tickets.forEach...",
-      time: "T3",
-      unread: 0,
-      avatar: "https://via.placeholder.com/150",
-    },
-    {
-      id: "2",
-      name: "Circle K Vietnam Careers",
-      lastMessage: "😉 TÌM VIỆC KHÔNG KHÓ...",
-      time: "1 giờ",
-      unread: 0,
-      avatar: "https://via.placeholder.com/150",
-    },
-    {
-      id: "3",
-      name: "Gia Đình Họ Võ",
-      lastMessage: "Di Sau: [Link] 1.4 triệu lượt xem...",
-      time: "6 giờ",
-      unread: 1,
-      avatar: "https://via.placeholder.com/150",
-    },
-  ];
+  const router = useRouter();
+
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [friends, setFriends] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+
+  const normalizeData = (data: any) => {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.data)) return data.data;
+    if (Array.isArray(data?.content)) return data.content;
+    if (data && typeof data === "object") {
+      if ("friendshipId" in data || "userId" in data || "username" in data) {
+        return [data];
+      }
+    }
+    return [];
+  };
+
+  const buildPrivateRoomId = (myId: number | string, otherId: number | string) => {
+    const a = Number(myId);
+    const b = Number(otherId);
+    return a < b ? `${a}_${b}` : `${b}_${a}`;
+  };
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+
+      const [meRes, friendsRes] = await Promise.all([
+        getMeApi(),
+        getFriendsApi(),
+      ]);
+
+      setCurrentUser(meRes);
+      setFriends(normalizeData(friendsRes));
+    } catch (error) {
+      console.log("load chat list error:", error);
+      setFriends([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
+
+  const openChat = (friend: any) => {
+    const myId = getCurrentUserId(currentUser);
+    const otherId = friend?.userId ?? friend?.id;
+
+    if (!myId || !otherId) return;
+
+    const roomId = buildPrivateRoomId(myId, otherId);
+    const username = encodeURIComponent(friend?.username || friend?.name || "Chat");
+
+    router.push(`/chat/${roomId}?username=${username}`);
+  };
+
+  const renderFriendItem = ({ item }: { item: any }) => {
+    const username = item?.username || item?.name || "Người dùng";
+    const avatar =
+      item?.avatar ||
+      item?.avatarUrl ||
+      item?.profilePicture ||
+      "https://via.placeholder.com/100";
+    const status = item?.status || "";
+
+    return (
+      <TouchableOpacity
+        style={styles.itemContainer}
+        activeOpacity={0.85}
+        onPress={() => openChat(item)}
+        disabled={!currentUser}
+      >
+        <Image source={{ uri: avatar }} style={styles.avatar} />
+
+        <View style={styles.info}>
+          <Text style={styles.name}>{username}</Text>
+          <Text style={styles.lastMessage}>{status || "Chat ngay"}</Text>
+        </View>
+
+        <Text style={styles.timeText}>Chat</Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#00a3ff" barStyle="light-content" />
+    <SafeAreaView edges={["top"]} style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#1296F3" />
 
-      {/* HEADER */}
       <View style={styles.header}>
-        <Ionicons name="search" size={22} color="#fff" />
+        <View>
+          <Text style={styles.headerTitle}>Tin nhắn</Text>
+          <Text style={styles.headerSub}>Bạn bè và nhóm chat</Text>
+        </View>
 
-        <TextInput
-          placeholder="Tìm kiếm"
-          placeholderTextColor="rgba(255,255,255,0.7)"
-          style={styles.searchInput}
-        />
-
-        <Ionicons
-          name="qr-code-outline"
-          size={22}
-          color="#fff"
-          style={{ marginRight: 15 }}
-        />
-        <Ionicons name="add" size={28} color="#fff" />
+        <TouchableOpacity
+          style={styles.groupBtn}
+          activeOpacity={0.85}
+          onPress={() => {
+            console.log("clicked + Nhóm");
+            setShowCreateGroup(true);
+          }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Text style={styles.groupBtnText}>+ Nhóm</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* LIST */}
-      <FlatList
-        data={chatData}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <ChatItem item={item} />}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+      {loading ? (
+        <View style={styles.centerBox}>
+          <ActivityIndicator size="large" color="#4F46E5" />
+        </View>
+      ) : friends.length === 0 ? (
+        <View style={styles.centerBox}>
+          <Text style={styles.emptyText}>Chưa có bạn bè để nhắn tin</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={friends}
+          keyExtractor={(item, index) =>
+            String(item?.friendshipId ?? item?.userId ?? item?.id ?? index)
+          }
+          renderItem={renderFriendItem}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 20 }}
+        />
+      )}
+
+      <CreateGroupModal
+        visible={showCreateGroup}
+        onClose={() => setShowCreateGroup(false)}
+        friends={friends}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-
+  container: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
   header: {
-    backgroundColor: "#00a3ff",
+    backgroundColor: "#1296F3",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 14,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 15,
-    height: 55, // Thống nhất độ cao
-    paddingTop: StatusBar.currentHeight ? 0 : 0, // Tránh lệch trên các thiết bị khác nhau
+    justifyContent: "space-between",
+    minHeight: 84,
   },
-  searchInput: {
-    flex: 1,
+  headerTitle: {
     color: "#fff",
-    fontSize: 16,
-    marginLeft: 15, // Khoảng cách đều từ icon search đến chữ
-    height: "100%", // Để vùng chạm tìm kiếm rộng hơn
+    fontSize: 24,
+    fontWeight: "700",
   },
-
-  separator: {
-    height: 1,
-    backgroundColor: "#f0f0f0",
-    marginLeft: 85,
+  headerSub: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 13,
+    marginTop: 2,
+  },
+  groupBtn: {
+    backgroundColor: "#FFFFFF",
+    minWidth: 86,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  groupBtnText: {
+    color: "#1296F3",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  centerBox: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyText: {
+    color: "#6B7280",
+    fontSize: 15,
+  },
+  itemContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F1F1",
+    backgroundColor: "#fff",
+  },
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#E5E7EB",
+  },
+  info: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  name: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  lastMessage: {
+    marginTop: 4,
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  timeText: {
+    fontSize: 12,
+    color: "#9CA3AF",
   },
 });

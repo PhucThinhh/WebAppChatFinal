@@ -1,44 +1,84 @@
-import { Send, Paperclip, Smile } from "lucide-react";
+import {
+  Send,
+  Paperclip,
+  Smile,
+  Sparkles,
+  Image,
+  X,
+  Loader2,
+} from "lucide-react";
 import { useRef, useEffect, useState } from "react";
 import EmojiPicker from "emoji-picker-react";
-import { uploadFileApi } from "../api/chatApi";
+import { rewriteMessageApi, uploadFileApi } from "../api/chatApi";
 
 function ChatInput({ input, setInput, onSend, onSendFile }) {
   const textareaRef = useRef(null);
   const fileRef = useRef(null);
 
   const [showEmoji, setShowEmoji] = useState(false);
-
-  // 🔥 NEW STATE
   const [previewFile, setPreviewFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiMode, setAiMode] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState([]);
+  const [aiError, setAiError] = useState("");
 
-  // AUTO RESIZE
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height =
-        textareaRef.current.scrollHeight + "px";
-    }
+    if (!textareaRef.current) return;
+
+    textareaRef.current.style.height = "auto";
+    textareaRef.current.style.height =
+      Math.min(textareaRef.current.scrollHeight, 140) + "px";
   }, [input]);
 
-  // SEND TEXT
   const handleSend = () => {
     if (!input?.trim()) return;
+
+    if (aiMode) {
+      handleAiRewrite();
+      return;
+    }
 
     onSend(input.trim());
     setInput("");
     setShowEmoji(false);
+    setAiSuggestions([]);
+    setAiError("");
   };
 
-  // EMOJI
+  const handleAiRewrite = async () => {
+    const text = input?.trim();
+    if (!text || aiLoading) return;
+
+    try {
+      setAiLoading(true);
+      setAiError("");
+      const res = await rewriteMessageApi(text);
+      const suggestions = Array.isArray(res.data) ? res.data : [];
+      setAiSuggestions(suggestions.filter(Boolean));
+    } catch (err) {
+      console.log("AI rewrite error:", err);
+      setAiSuggestions([]);
+      setAiError("AI chưa gợi ý được, thử lại sau nha.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const chooseAiSuggestion = (suggestion) => {
+    setInput(suggestion);
+    setAiSuggestions([]);
+    setAiError("");
+    setAiMode(false);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
   const handleEmojiClick = (emojiData) => {
     setInput((prev) => prev + emojiData.emoji);
   };
 
-  // 🔥 CHỌN FILE → PREVIEW
   const handleSelectFile = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
 
     const url = URL.createObjectURL(file);
@@ -48,19 +88,17 @@ function ChatInput({ input, setInput, onSend, onSendFile }) {
       url,
       isImage: file.type.startsWith("image"),
     });
+
+    e.target.value = "";
   };
 
-  // 🔥 UPLOAD FILE
   const handleUploadFile = async () => {
     if (!previewFile) return;
 
     try {
       setLoading(true);
-
       const res = await uploadFileApi(previewFile.file);
-
       onSendFile(res.data);
-
       setPreviewFile(null);
     } catch (err) {
       console.log("Upload lỗi:", err);
@@ -70,81 +108,160 @@ function ChatInput({ input, setInput, onSend, onSendFile }) {
   };
 
   return (
-    <div className="px-6 py-5 border-t border-slate-700/50 relative">
-      {/* 🔥 PREVIEW */}
+    <div className="zalo-input-area">
+      {(aiSuggestions.length > 0 || aiError || aiLoading) && (
+        <div className="ai-suggestions-panel">
+          <div className="ai-suggestions-head">
+            <span>Gợi ý câu nhắn</span>
+            <button
+              type="button"
+              onClick={() => {
+                setAiSuggestions([]);
+                setAiError("");
+              }}
+              title="Đóng gợi ý"
+            >
+              <X size={15} />
+            </button>
+          </div>
+
+          {aiLoading && (
+            <div className="ai-suggestions-loading">
+              <Loader2 size={16} className="animate-spin" />
+              AI đang viết lại câu cho tự nhiên hơn...
+            </div>
+          )}
+
+          {aiError && <div className="ai-suggestions-error">{aiError}</div>}
+
+          {aiSuggestions.map((suggestion, index) => (
+            <button
+              type="button"
+              key={`${suggestion}-${index}`}
+              className="ai-suggestion-item"
+              onClick={() => chooseAiSuggestion(suggestion)}
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      )}
+
       {previewFile && (
-        <div className="mb-3 relative w-fit">
+        <div className="zalo-file-preview">
           {previewFile.isImage ? (
-            <img src={previewFile.url} className="w-32 rounded-lg border" />
+            <img
+              src={previewFile.url}
+              className="zalo-file-preview-img"
+              alt="preview"
+            />
           ) : (
-            <div className="bg-slate-800 px-3 py-2 rounded-lg">
-              📎 {previewFile.file.name}
+            <div className="zalo-file-preview-doc">
+              <Paperclip size={18} />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">
+                  {previewFile.file.name}
+                </p>
+                <p className="text-xs text-slate-400">
+                  {(previewFile.file.size / 1024 / 1024).toFixed(2)} MB
+                </p>
+              </div>
             </div>
           )}
 
           <button
+            type="button"
             onClick={() => setPreviewFile(null)}
-            className="absolute -top-2 -right-2 bg-black text-white text-xs px-2 rounded"
+            className="zalo-file-remove"
           >
-            ✕
+            <X size={15} />
           </button>
         </div>
       )}
 
-      <div className="flex items-end gap-3 max-w-5xl mx-auto">
-        {/* FILE INPUT */}
+      <div className="zalo-input-shell">
         <input type="file" ref={fileRef} hidden onChange={handleSelectFile} />
 
-        {/* ATTACH */}
         <button
-          onClick={() => fileRef.current.click()}
-          className="p-3 rounded-full hover:bg-slate-700 transition"
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="zalo-input-icon"
+          title="Gửi file"
         >
           <Paperclip size={22} />
         </button>
 
-        {/* INPUT */}
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Nhập tin nhắn..."
-          rows="1"
-          className="flex-1 bg-slate-800 text-white px-5 py-3 rounded-3xl outline-none resize-none"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-        />
-
-        {/* EMOJI */}
         <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="zalo-input-icon"
+          title="Gửi ảnh"
+        >
+          <Image size={22} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAiMode((v) => !v)}
+          title={aiMode ? "Tắt gợi ý AI" : "Gợi ý câu bằng AI"}
+          className={`zalo-input-icon ${aiMode ? "ai-active" : ""}`}
+        >
+          <Sparkles size={22} />
+        </button>
+
+        <div className="zalo-textbox-wrap">
+          {aiMode && <span className="zalo-ai-chip">AI</span>}
+
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value);
+              setAiError("");
+            }}
+            placeholder={
+              aiMode
+                ? "Nhập ý muốn nói, AI sẽ gợi ý câu hay hơn..."
+                : "Nhập tin nhắn, @ để nhắc tên..."
+            }
+            rows="1"
+            className="zalo-textbox"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                previewFile ? handleUploadFile() : handleSend();
+              }
+            }}
+          />
+        </div>
+
+        <button
+          type="button"
           onClick={() => setShowEmoji((prev) => !prev)}
-          className="p-3 rounded-full hover:bg-slate-700 transition"
+          className="zalo-input-icon"
+          title="Emoji"
         >
           <Smile size={22} />
         </button>
 
-        {/* SEND */}
         <button
+          type="button"
           onClick={previewFile ? handleUploadFile : handleSend}
-          className="p-3 rounded-full hover:bg-indigo-600 transition"
+          disabled={loading || aiLoading || (!previewFile && !input?.trim())}
+          className="zalo-send-btn"
+          title={aiMode ? "Lấy gợi ý AI" : "Gửi"}
         >
-          <Send size={22} />
+          {loading || aiLoading ? (
+            <Loader2 size={21} className="animate-spin" />
+          ) : (
+            <Send size={21} />
+          )}
         </button>
       </div>
 
-      {/* 🔥 LOADING */}
-      {loading && (
-        <div className="text-xs text-slate-400 mt-2">Đang upload...</div>
-      )}
-
-      {/* EMOJI PICKER */}
       {showEmoji && (
-        <div className="absolute bottom-20 right-10 z-50">
-          <EmojiPicker onEmojiClick={handleEmojiClick} theme="dark" />
+        <div className="zalo-emoji-panel">
+          <EmojiPicker onEmojiClick={handleEmojiClick} theme="light" />
         </div>
       )}
     </div>

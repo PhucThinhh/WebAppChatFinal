@@ -4,6 +4,7 @@ import {
   acceptFriendApi,
   rejectFriendApi,
 } from "../api/friendApi";
+import { getImageUrl } from "../../../utils/imageUrl";
 
 function FriendRequests() {
   const [requests, setRequests] = useState([]);
@@ -63,7 +64,7 @@ function FriendRequests() {
             {/* LEFT */}
             <div className="flex items-center gap-3">
               <img
-                src={r.avatar}
+                src={getImageUrl(r.avatar)}
                 className="w-10 h-10 rounded-full"
                 alt="avatar"
               />

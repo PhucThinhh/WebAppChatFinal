@@ -30,6 +30,10 @@ export const uploadFileApi = (file) => {
   });
 };
 
+export const rewriteMessageApi = (text) => {
+  return axiosClient.post("/chat/ai/rewrite", { text });
+};
+
 // 🔥 block user
 export const blockUserApi = (targetId) => {
   return axiosClient.post(`/block/${targetId}`);
@@ -50,5 +54,43 @@ export const getBlockStatusApi = (targetId) => {
 };
 
 export const createGroupApi = (data) => {
-  return axiosClient.post("http://localhost:8080/chat/group/create", data);
+  return axiosClient.post("http://localhost:8080/api/chat/group/create", data);
+};
+
+export const getMyGroupsApi = (userId) => {
+  return axiosClient.get(`/chat/group/my-groups?userId=${userId}`);
+};
+
+export const addMemberApi = (groupId, userId) => {
+  return axiosClient.post(
+    `/chat/group/add-member?groupId=${groupId}&userId=${userId}`
+  );
+};
+/** Trả về mảng GroupMemberDTO: { userId, username, avatar, role } */
+export const getGroupMembersApi = (groupId) => {
+  return axiosClient.get(`/chat/group/members?groupId=${groupId}`);
+};
+
+export const removeMemberApi = (groupId, userId, currentUserId) => {
+  return axiosClient.delete(
+    `/chat/group/remove-member?groupId=${groupId}&userId=${userId}&currentUserId=${currentUserId}`
+  );
+};
+
+export const deleteGroupApi = (groupId, currentUserId) => {
+  return axiosClient.delete(
+    `/chat/group/delete?groupId=${groupId}&currentUserId=${currentUserId}`
+  );
+};
+
+export const updateRoleApi = (groupId, userId, role, currentUserId) => {
+  return axiosClient.put(
+    `/chat/group/update-role?groupId=${groupId}&userId=${userId}&role=${role}&currentUserId=${currentUserId}`
+  );
+};
+
+export const leaveGroupApi = (groupId, userId) => {
+  return axiosClient.delete(
+    `/chat/group/leave?groupId=${groupId}&userId=${userId}`
+  );
 };

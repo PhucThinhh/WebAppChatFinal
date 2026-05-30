@@ -4,7 +4,6 @@ import com.chatapp.dto.ChangePasswordRequest;
 import com.chatapp.dto.UpdateUserRequest;
 import com.chatapp.dto.UserResponse;
 import com.chatapp.entity.User;
-import com.chatapp.service.S3Service;
 import com.chatapp.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -12,19 +11,20 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/user")
 public class UserController {
 
     private final UserService userService;
-    private final S3Service s3Service;
 
-    public UserController(UserService userService,
-                          S3Service s3Service) {
+    public UserController(UserService userService) {
         this.userService = userService;
-        this.s3Service = s3Service;
     }
 
     @GetMapping("/me")
@@ -60,7 +60,7 @@ public class UserController {
 
         User user = userService.getById(userId);
 
-        String url = s3Service.uploadFile(file);
+        String url = storeUpload(file);
 
         user.setAvatar(url);
         userService.save(user);
@@ -78,7 +78,7 @@ public class UserController {
 
         User user = userService.getById(userId);
 
-        String url = s3Service.uploadFile(file);
+        String url = storeUpload(file);
 
         user.setCoverImage(url);
         userService.save(user);
@@ -98,6 +98,20 @@ public class UserController {
                 .coverImage(user.getCoverImage())
                 .role(user.getRole() != null ? user.getRole().name() : null)
                 .build();
+    }
+
+    private String storeUpload(MultipartFile file) throws Exception {
+        String originalName = file.getOriginalFilename();
+        String safeName = originalName == null ? "image.jpg" : Paths.get(originalName).getFileName().toString();
+        String fileName = System.currentTimeMillis() + "_" + UUID.randomUUID() + "_" + safeName;
+
+        Path uploadDir = Paths.get("uploads");
+        Files.createDirectories(uploadDir);
+
+        Path path = uploadDir.resolve(fileName);
+        Files.write(path, file.getBytes());
+
+        return "/uploads/" + fileName;
     }
 
     @PostMapping("/change-password")

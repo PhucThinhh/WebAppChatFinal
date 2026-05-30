@@ -7,6 +7,7 @@ let connectionState = "DISCONNECTED";
 let activeRooms = {};
 let pendingRooms = {};
 let statusSubscription = null;
+let currentSocketUserId = null;
 
 // ================= GLOBAL LOGOUT =================
 window.addEventListener("storage", (event) => {
@@ -17,6 +18,8 @@ window.addEventListener("storage", (event) => {
 
 // ================= CONNECT =================
 export const connectSocket = (userId, onReady) => {
+  currentSocketUserId = String(userId);
+
   const token = localStorage.getItem("token");
   if (!token) return;
 
@@ -41,13 +44,14 @@ export const connectSocket = (userId, onReady) => {
           roomId,
           cb.callback,
           cb.deleteCallback,
-          cb.recallCallback
+          cb.recallCallback,
+          cb.moderationCallback
         );
       });
 
       // restore pending rooms
       Object.entries(pendingRooms).forEach(([roomId, cb]) => {
-        internalJoinRoom(roomId, cb.onMessage, cb.onDelete, cb.onRecall);
+        internalJoinRoom(roomId, cb.onMessage, cb.onDelete, cb.onRecall, cb.onModeration);
       });
 
       pendingRooms = {};
@@ -69,7 +73,7 @@ export const connectSocket = (userId, onReady) => {
 };
 
 // ================= INTERNAL JOIN ROOM =================
-const internalJoinRoom = (roomId, onMessage, onDelete, onRecall) => {
+const internalJoinRoom = (roomId, onMessage, onDelete, onRecall, onModeration) => {
   if (!stompClient) return;
 
   const existing = activeRooms[roomId];
@@ -77,6 +81,7 @@ const internalJoinRoom = (roomId, onMessage, onDelete, onRecall) => {
     existing.messageSub?.unsubscribe();
     existing.deleteSub?.unsubscribe();
     existing.recallSub?.unsubscribe();
+    existing.moderationSub?.unsubscribe();
     delete activeRooms[roomId];
   }
 
@@ -118,28 +123,42 @@ const internalJoinRoom = (roomId, onMessage, onDelete, onRecall) => {
     }
   );
 
+  const moderationSub = stompClient.subscribe(
+    `/topic/chat/${roomId}/moderation/${currentSocketUserId}`,
+    (msg) => {
+      try {
+        const data = JSON.parse(msg.body);
+        onModeration?.(data);
+      } catch (err) {
+        console.error("Parse moderation error:", err);
+      }
+    }
+  );
+
   activeRooms[roomId] = {
     messageSub,
     deleteSub,
     recallSub,
+    moderationSub,
     callback: onMessage,
     deleteCallback: onDelete,
     recallCallback: onRecall,
+    moderationCallback: onModeration,
   };
 
   console.log("📌 Joined room:", roomId);
 };
 
 // ================= JOIN ROOM =================
-export const joinRoom = (roomId, onMessage, onDelete, onRecall) => {
+export const joinRoom = (roomId, onMessage, onDelete, onRecall, onModeration) => {
   if (!stompClient) return;
 
   if (connectionState !== "CONNECTED") {
-    pendingRooms[roomId] = { onMessage, onDelete, onRecall };
+    pendingRooms[roomId] = { onMessage, onDelete, onRecall, onModeration };
     return;
   }
 
-  internalJoinRoom(roomId, onMessage, onDelete, onRecall);
+  internalJoinRoom(roomId, onMessage, onDelete, onRecall, onModeration);
 };
 
 // ================= LEAVE ROOM =================
@@ -148,6 +167,7 @@ export const leaveRoom = (roomId) => {
     activeRooms[roomId].messageSub?.unsubscribe();
     activeRooms[roomId].deleteSub?.unsubscribe();
     activeRooms[roomId].recallSub?.unsubscribe();
+    activeRooms[roomId].moderationSub?.unsubscribe();
 
     delete activeRooms[roomId];
 
@@ -188,6 +208,19 @@ export const subscribeUserStatus = (callback) => {
   return statusSubscription;
 };
 
+export const subscribeGroupUpdates = (userId, callback) => {
+  if (!stompClient || connectionState !== "CONNECTED" || !userId) return;
+
+  return stompClient.subscribe(`/topic/group-updates/${userId}`, (msg) => {
+    try {
+      const data = JSON.parse(msg.body || "{}");
+      callback?.(data);
+    } catch {
+      callback?.({});
+    }
+  });
+};
+
 // ================= DISCONNECT =================
 export const disconnectSocket = () => {
   stompClient?.deactivate();
@@ -198,6 +231,7 @@ export const disconnectSocket = () => {
   activeRooms = {};
   pendingRooms = {};
   statusSubscription = null;
+  currentSocketUserId = null;
 
   console.log("❌ SOCKET DISCONNECTED");
 };

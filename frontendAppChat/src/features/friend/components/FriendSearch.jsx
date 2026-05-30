@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { searchUserApi, sendFriendRequestApi } from "../api/friendApi";
+import { getImageUrl } from "../../../utils/imageUrl";
 
 function FriendSearch() {
   const [keyword, setKeyword] = useState("");
@@ -68,7 +69,7 @@ function FriendSearch() {
             {/* LEFT */}
             <div className="flex items-center gap-3">
               <img
-                src={u.avatar}
+                src={getImageUrl(u.avatar)}
                 className="w-10 h-10 rounded-full object-cover"
               />
               <div>

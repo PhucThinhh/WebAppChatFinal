@@ -1,25 +1,47 @@
 import { useEffect, useState, useMemo } from "react";
 import { getFriendsApi } from "../api/friendApi";
+import { getImageUrl } from "../../../utils/imageUrl";
 
-function FriendsList({ onSelectUser, onlineUsers = new Set() }) {
+function FriendsList({ data, onSelectUser, onlineUsers = new Set() }) {
   const [friends, setFriends] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   // ================= FETCH FRIENDS =================
   useEffect(() => {
+    if (data) {
+      setFriends(data); // 🔥 dùng data từ ngoài
+      setLoading(false);
+      return;
+    }
+
     const fetchFriends = async () => {
       try {
+        setError("");
+        setLoading(true);
         const res = await getFriendsApi();
-        setFriends(res.data || res || []);
+        const payload = res.data?.data || res.data?.friends || res.data || [];
+        setFriends(Array.isArray(payload) ? payload : []);
       } catch (err) {
         console.error("Load friends error:", err);
+        const status = err.response?.status;
+        const message =
+          err.response?.data?.message ||
+          (typeof err.response?.data === "string" ? err.response.data : "") ||
+          err.message;
+        setError(
+          status
+            ? `Không tải được danh sách bạn bè (${status})`
+            : message || "Không tải được danh sách bạn bè"
+        );
+        setFriends([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchFriends();
-  }, []);
+  }, [data]);
 
   // ================= FORMAT DATA =================
   const formatFriendData = (f) => ({
@@ -43,6 +65,7 @@ function FriendsList({ onSelectUser, onlineUsers = new Set() }) {
   }, [friends, onlineUsers]);
 
   if (loading) return <div className="p-3 text-gray-400">Đang tải...</div>;
+  if (error) return <div className="p-3 text-red-500 font-medium">{error}</div>;
 
   return (
     <div className="p-3">
@@ -72,7 +95,7 @@ function FriendsList({ onSelectUser, onlineUsers = new Set() }) {
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <img
-                    src={friend.avatar}
+                    src={getImageUrl(friend.avatar)}
                     alt={friend.username}
                     className="w-11 h-11 rounded-full object-cover border border-slate-600"
                     onError={(e) => {

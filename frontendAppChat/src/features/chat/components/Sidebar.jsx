@@ -7,7 +7,12 @@ import {
   Key,
   Search,
   Users,
+  Bell,
 } from "lucide-react";
+import { getImageUrl } from "../../../utils/imageUrl";
+
+const DEFAULT_AVATAR =
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="%231e293b"/><circle cx="32" cy="24" r="12" fill="%23e2e8f0"/><path d="M12 56c4-12 14-18 20-18s16 6 20 18" fill="%23e2e8f0"/></svg>';
 
 function Sidebar({
   user,
@@ -18,114 +23,150 @@ function Sidebar({
   onChangePassword,
   onSelectTab,
   activeTab,
+  notificationCount = 0,
 }) {
+  const avatarSrc = getImageUrl(user?.avatar) || DEFAULT_AVATAR;
+
+  const navItems = [
+    {
+      id: "chat",
+      icon: MessageCircle,
+      label: "Tin nhắn",
+      badge: null,
+    },
+    {
+      id: "friends",
+      icon: User,
+      label: "Bạn bè",
+      badge: null,
+    },
+    {
+      id: "requests",
+      icon: Calendar,
+      label: "Lời mời",
+      badge: null,
+    },
+    {
+      id: "group",
+      icon: Users,
+      label: "Nhóm",
+      badge: null,
+    },
+    {
+      id: "search",
+      icon: Search,
+      label: "Tìm kiếm",
+      badge: null,
+    },
+  ];
+
   return (
-    <div className="w-[90px] bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex flex-col items-center py-6 shrink-0 h-screen border-r border-slate-700/50">
-      {/* AVATAR */}
-      <div className="relative mb-10 cursor-pointer" onClick={onOpenProfile}>
+    <aside className="zalo-sidebar">
+      <button
+        type="button"
+        className="zalo-avatar-wrap"
+        onClick={onOpenProfile}
+        title={user?.username || "Trang cá nhân"}
+      >
         <img
-          src={
-            user?.avatar?.startsWith("http")
-              ? user.avatar
-              : `http://localhost:8080${user?.avatar}`
-          }
-          className="w-14 h-14 rounded-full object-cover border border-slate-600"
+          src={avatarSrc}
+          className="zalo-avatar"
           alt="avatar"
+          onError={(e) => {
+            e.currentTarget.src = DEFAULT_AVATAR;
+          }}
         />
-      </div>
+        <span className="zalo-online-dot" />
+      </button>
 
-      {/* NAV */}
-      <div className="flex flex-col space-y-5 flex-1 items-center">
-        {/* CHAT */}
-        <div
-          onClick={() => onSelectTab("chat")}
-          className={`p-3 rounded-2xl cursor-pointer transition ${
-            activeTab === "chat"
-              ? "bg-blue-500/20 text-blue-400"
-              : "text-slate-500 hover:text-white"
-          }`}
-        >
-          <MessageCircle size={24} />
-        </div>
+      <nav className="zalo-nav">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
 
-        {/* FRIENDS */}
-        <div
-          onClick={() => onSelectTab("friends")}
-          className={`p-3 rounded-2xl cursor-pointer transition ${
-            activeTab === "friends"
-              ? "bg-blue-500/20 text-blue-400"
-              : "text-slate-500 hover:text-white"
-          }`}
-        >
-          <User size={24} />
-        </div>
-
-        {/* REQUESTS */}
-        <div
-          onClick={() => onSelectTab("requests")}
-          className={`p-3 rounded-2xl cursor-pointer transition ${
-            activeTab === "requests"
-              ? "bg-blue-500/20 text-blue-400"
-              : "text-slate-500 hover:text-white"
-          }`}
-        >
-          <Calendar size={24} />
-        </div>
-
-        <div
-          onClick={() => onSelectTab("group")}
-          className={`p-3 rounded-2xl cursor-pointer transition ${
-            activeTab === "group"
-              ? "bg-blue-500/20 text-blue-400"
-              : "text-slate-500 hover:text-white"
-          }`}
-        >
-          <Users size={24} />
-        </div>
-
-        {/* SEARCH FRIENDS 🔥 NEW */}
-        <div
-          onClick={() => onSelectTab("search")}
-          className={`p-3 rounded-2xl cursor-pointer transition ${
-            activeTab === "search"
-              ? "bg-blue-500/20 text-blue-400"
-              : "text-slate-500 hover:text-white"
-          }`}
-        >
-          <Search size={24} />
-        </div>
-      </div>
-
-      {/* SETTINGS */}
-      <div className="relative">
-        <div
-          className="p-3 text-slate-500 hover:text-white cursor-pointer"
-          onClick={() => setShowSettings(!showSettings)}
-        >
-          <Settings size={24} />
-        </div>
-
-        {showSettings && (
-          <div className="absolute bottom-16 left-0 bg-slate-800 p-2 rounded-xl w-52 shadow-lg border border-slate-700">
-            {/* CHANGE PASSWORD */}
+          return (
             <button
-              onClick={onChangePassword}
-              className="flex items-center gap-2 p-2 text-white w-full hover:bg-slate-700 rounded"
+              key={item.id}
+              type="button"
+              onClick={() => onSelectTab(item.id)}
+              className={`zalo-nav-btn ${isActive ? "active" : ""}`}
+              title={item.label}
             >
-              <Key size={16} /> Đổi mật khẩu
+              <Icon size={24} strokeWidth={2.2} />
+              {item.badge && <span className="zalo-nav-badge">{item.badge}</span>}
             </button>
+          );
+        })}
+      </nav>
 
-            {/* LOGOUT */}
-            <button
-              onClick={onLogout}
-              className="flex items-center gap-2 p-2 text-red-400 w-full hover:bg-slate-700 rounded"
-            >
-              <LogOut size={16} /> Đăng xuất
-            </button>
-          </div>
-        )}
+      <div className="zalo-bottom">
+        <button
+          type="button"
+          className={`zalo-nav-btn ${activeTab === "notifications" ? "active" : ""}`}
+          title="Thông báo"
+          onClick={() => onSelectTab("notifications")}
+        >
+          <Bell size={23} strokeWidth={2.2} />
+          {notificationCount > 0 && (
+            <span className="zalo-nav-badge">
+              {notificationCount > 99 ? "99+" : notificationCount}
+            </span>
+          )}
+        </button>
+
+        <div className="relative">
+          <button
+            type="button"
+            className={`zalo-nav-btn ${showSettings ? "active" : ""}`}
+            onClick={() => setShowSettings(!showSettings)}
+            title="Cài đặt"
+          >
+            <Settings size={23} strokeWidth={2.2} />
+          </button>
+
+          {showSettings && (
+            <div className="zalo-settings-menu">
+              <div className="zalo-settings-header">
+                <img
+                  src={avatarSrc}
+                  alt="avatar"
+                  className="w-10 h-10 rounded-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.src = DEFAULT_AVATAR;
+                  }}
+                />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">
+                    {user?.username || "Người dùng"}
+                  </p>
+                  <p className="text-xs text-slate-400 truncate">
+                    {user?.email || "Tài khoản ChatApp"}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onChangePassword}
+                className="zalo-settings-item"
+              >
+                <Key size={17} />
+                <span>Đổi mật khẩu</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onLogout}
+                className="zalo-settings-item danger"
+              >
+                <LogOut size={17} />
+                <span>Đăng xuất</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </aside>
   );
 }
 

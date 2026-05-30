@@ -22,8 +22,8 @@ public class FileController {
 
             Files.write(path, file.getBytes());
 
-            // 👉 trả về URL cho frontend
-            return ResponseEntity.ok("http://localhost:8080/uploads/" + fileName);
+            // 👉 trả về path tương đối để web/mobile tự map host phù hợp
+            return ResponseEntity.ok("/uploads/" + fileName);
 
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Upload failed");

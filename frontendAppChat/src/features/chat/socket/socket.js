@@ -45,13 +45,14 @@ export const connectSocket = (userId, onReady) => {
           cb.callback,
           cb.deleteCallback,
           cb.recallCallback,
-          cb.moderationCallback
+          cb.moderationCallback,
+          cb.reactionCallback
         );
       });
 
       // restore pending rooms
       Object.entries(pendingRooms).forEach(([roomId, cb]) => {
-        internalJoinRoom(roomId, cb.onMessage, cb.onDelete, cb.onRecall, cb.onModeration);
+        internalJoinRoom(roomId, cb.onMessage, cb.onDelete, cb.onRecall, cb.onModeration, cb.onReaction);
       });
 
       pendingRooms = {};
@@ -73,7 +74,7 @@ export const connectSocket = (userId, onReady) => {
 };
 
 // ================= INTERNAL JOIN ROOM =================
-const internalJoinRoom = (roomId, onMessage, onDelete, onRecall, onModeration) => {
+const internalJoinRoom = (roomId, onMessage, onDelete, onRecall, onModeration, onReaction) => {
   if (!stompClient) return;
 
   const existing = activeRooms[roomId];
@@ -82,6 +83,7 @@ const internalJoinRoom = (roomId, onMessage, onDelete, onRecall, onModeration) =
     existing.deleteSub?.unsubscribe();
     existing.recallSub?.unsubscribe();
     existing.moderationSub?.unsubscribe();
+    existing.reactionSub?.unsubscribe();
     delete activeRooms[roomId];
   }
 
@@ -135,30 +137,45 @@ const internalJoinRoom = (roomId, onMessage, onDelete, onRecall, onModeration) =
     }
   );
 
+  const reactionSub = stompClient.subscribe(
+    `/topic/chat/${roomId}/reaction`,
+    (msg) => {
+      try {
+        const data = JSON.parse(msg.body);
+        onReaction?.(data);
+        window.dispatchEvent(new CustomEvent("chat-message-reaction", { detail: data }));
+      } catch (err) {
+        console.error("Parse reaction error:", err);
+      }
+    }
+  );
+
   activeRooms[roomId] = {
     messageSub,
     deleteSub,
     recallSub,
     moderationSub,
+    reactionSub,
     callback: onMessage,
     deleteCallback: onDelete,
     recallCallback: onRecall,
     moderationCallback: onModeration,
+    reactionCallback: onReaction,
   };
 
   console.log("📌 Joined room:", roomId);
 };
 
 // ================= JOIN ROOM =================
-export const joinRoom = (roomId, onMessage, onDelete, onRecall, onModeration) => {
+export const joinRoom = (roomId, onMessage, onDelete, onRecall, onModeration, onReaction) => {
   if (!stompClient) return;
 
   if (connectionState !== "CONNECTED") {
-    pendingRooms[roomId] = { onMessage, onDelete, onRecall, onModeration };
+    pendingRooms[roomId] = { onMessage, onDelete, onRecall, onModeration, onReaction };
     return;
   }
 
-  internalJoinRoom(roomId, onMessage, onDelete, onRecall, onModeration);
+  internalJoinRoom(roomId, onMessage, onDelete, onRecall, onModeration, onReaction);
 };
 
 // ================= LEAVE ROOM =================
@@ -168,6 +185,7 @@ export const leaveRoom = (roomId) => {
     activeRooms[roomId].deleteSub?.unsubscribe();
     activeRooms[roomId].recallSub?.unsubscribe();
     activeRooms[roomId].moderationSub?.unsubscribe();
+    activeRooms[roomId].reactionSub?.unsubscribe();
 
     delete activeRooms[roomId];
 
@@ -187,6 +205,35 @@ export const sendMessageSocket = (message) => {
   stompClient.publish({
     destination: "/app/chat.send",
     body: JSON.stringify(message),
+  });
+};
+
+export const sendCallSignal = (payload) => {
+  const token = localStorage.getItem("token");
+
+  if (!token || connectionState !== "CONNECTED" || !stompClient) {
+    console.log("BLOCK CALL - socket not ready");
+    return false;
+  }
+
+  stompClient.publish({
+    destination: "/app/call.signal",
+    body: JSON.stringify(payload),
+  });
+
+  return true;
+};
+
+export const subscribeCallSignals = (userId, callback) => {
+  if (!stompClient || connectionState !== "CONNECTED" || !userId) return;
+
+  return stompClient.subscribe(`/topic/call/${userId}`, (msg) => {
+    try {
+      const data = JSON.parse(msg.body || "{}");
+      callback?.(data);
+    } catch (err) {
+      console.error("Parse call signal error:", err);
+    }
   });
 };
 

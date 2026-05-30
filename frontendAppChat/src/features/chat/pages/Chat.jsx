@@ -26,6 +26,7 @@ import axiosClient from "../../../services/axiosClient";
     disconnectSocket,
     joinRoom,
     leaveRoom,
+    subscribeCallSignals,
     subscribeOnlineList,
   } from "../socket/socket";
 
@@ -142,6 +143,18 @@ import axiosClient from "../../../services/axiosClient";
 
     const getFriendName = (friend) =>
       friend?.username || friend?.name || `User ${getFriendId(friend)}`;
+
+    const normalizeFriendUser = (friend) => {
+      const id = getFriendId(friend);
+
+      if (!id) return null;
+
+      return {
+        id,
+        username: getFriendName(friend),
+        avatar: friend?.avatar || null,
+      };
+    };
 
     const getMemberRole = (member) =>
       String(member?.role || "MEMBER").toUpperCase();
@@ -368,10 +381,70 @@ import axiosClient from "../../../services/axiosClient";
     }, [conversations, conversationStorageKey]);
 
     useEffect(() => {
+      if (!currentUserId) return;
+
+      let cancelled = false;
+
+      const syncFriendProfiles = async () => {
+        try {
+          const res = await getFriendsApi();
+          const friends = Array.isArray(res.data) ? res.data : [];
+          const friendById = new Map(
+            friends
+              .map((friend) => normalizeFriendUser(friend))
+              .filter(Boolean)
+              .map((friend) => [Number(friend.id), friend])
+          );
+
+          if (cancelled || friendById.size === 0) return;
+
+          setConversations((prev) =>
+            prev.map((conversation) => {
+              if (conversation.type !== "PRIVATE") return conversation;
+
+              const targetId = Number(conversation.targetUser?.id);
+              const freshFriend = friendById.get(targetId);
+
+              if (!freshFriend) return conversation;
+
+              return {
+                ...conversation,
+                name: freshFriend.username,
+                avatar: resolveAvatar(freshFriend.avatar),
+                targetUser: {
+                  ...conversation.targetUser,
+                  ...freshFriend,
+                },
+              };
+            })
+          );
+
+          setSelectedUser((prev) => {
+            if (!prev?.id) return prev;
+
+            const freshFriend = friendById.get(Number(prev.id));
+            return freshFriend ? { ...prev, ...freshFriend } : prev;
+          });
+        } catch (error) {
+          console.error("Sync friend profiles error:", error);
+        }
+      };
+
+      syncFriendProfiles();
+      const timer = window.setInterval(syncFriendProfiles, 30000);
+
+      return () => {
+        cancelled = true;
+        window.clearInterval(timer);
+      };
+    }, [currentUserId]);
+
+    useEffect(() => {
       if (!user?.id) return;
 
       let statusSub = null;
       let listSub = null;
+      let callSub = null;
     let groupSub = null;
     const userId = Number(user.id);
 
@@ -445,6 +518,24 @@ import axiosClient from "../../../services/axiosClient";
           });
         });
 
+        callSub = subscribeCallSignals(user.id, (payload) => {
+          if (!payload || payload.type !== "offer") return;
+          if (Number(payload.fromUserId) === Number(user.id)) return;
+
+          setCallModal({
+            mode: payload.mode || "audio",
+            title: payload.callerName || "Cuộc gọi đến",
+            avatar: payload.callerAvatar,
+            currentUserId: Number(user.id),
+            targetUserId: Number(payload.fromUserId),
+            targetName: payload.callerName || "Người gọi",
+            targetAvatar: payload.callerAvatar,
+            incomingOffer: payload.signal,
+            isIncoming: true,
+            callId: payload.callId,
+          });
+        });
+
         axiosClient
           .get("/users/online")
           .then((res) => {
@@ -482,6 +573,7 @@ import axiosClient from "../../../services/axiosClient";
       return () => {
         statusSub?.unsubscribe();
         listSub?.unsubscribe();
+      callSub?.unsubscribe();
       groupSub?.unsubscribe();
       };
     }, [user?.id]);
@@ -782,6 +874,7 @@ import axiosClient from "../../../services/axiosClient";
                 type: message.type,
                 originalSenderId: message.originalSenderId,
                 originalContent: message.originalContent,
+                reactions: message.reactions || {},
               });
               return;
             }
@@ -1551,14 +1644,38 @@ import axiosClient from "../../../services/axiosClient";
                     {!selectedGroup && selectedUser && (
                       <>
                         <button
-                          onClick={() => setCallModal({ mode: "audio", title: currentTitle, avatar: currentAvatar })}
+                          onClick={() =>
+                            setCallModal({
+                              mode: "audio",
+                              title: currentTitle,
+                              avatar: currentAvatar,
+                              currentUserId,
+                              targetUserId: selectedUser.id,
+                              targetName: currentTitle,
+                              targetAvatar: currentAvatar,
+                              callerName: user?.username || "Người gọi",
+                              callerAvatar: user?.avatar,
+                            })
+                          }
                           className="header-action-btn"
                           title="Gọi thoại"
                         >
                           <Phone size={20} />
                         </button>
                         <button
-                          onClick={() => setCallModal({ mode: "video", title: currentTitle, avatar: currentAvatar })}
+                          onClick={() =>
+                            setCallModal({
+                              mode: "video",
+                              title: currentTitle,
+                              avatar: currentAvatar,
+                              currentUserId,
+                              targetUserId: selectedUser.id,
+                              targetName: currentTitle,
+                              targetAvatar: currentAvatar,
+                              callerName: user?.username || "Người gọi",
+                              callerAvatar: user?.avatar,
+                            })
+                          }
                           className="header-action-btn"
                           title="Gọi video"
                         >
@@ -2238,9 +2355,7 @@ import axiosClient from "../../../services/axiosClient";
 
         {callModal && (
           <CallModal
-            mode={callModal.mode}
-            title={callModal.title}
-            avatar={callModal.avatar}
+            {...callModal}
             onClose={() => setCallModal(null)}
           />
         )}

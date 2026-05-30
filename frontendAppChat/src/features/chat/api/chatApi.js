@@ -15,6 +15,10 @@ export const recallMessageApi = (messageId) => {
   return axiosClient.put(`/chat/message/recall/${messageId}`);
 };
 
+export const reactMessageApi = (messageId, emoji) => {
+  return axiosClient.put(`/chat/message/${messageId}/reaction`, { emoji });
+};
+
 export const deleteConversationApi = (roomId) => {
   return axiosClient.delete(`/chat/conversation/${roomId}`);
 };

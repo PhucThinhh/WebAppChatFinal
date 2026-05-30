@@ -69,7 +69,7 @@ function FriendsList({ data, onSelectUser, onlineUsers = new Set() }) {
 
   return (
     <div className="p-3">
-      <h3 className="text-white mb-4 font-semibold text-lg">
+      <h3 className="friend-list-title">
         Danh sách bạn bè
       </h3>
 

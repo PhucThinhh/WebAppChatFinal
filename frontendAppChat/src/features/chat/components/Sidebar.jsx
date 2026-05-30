@@ -9,6 +9,7 @@ import {
   Users,
   Bell,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 import { getImageUrl } from "../../../utils/imageUrl";
 
 const DEFAULT_AVATAR =
@@ -28,93 +29,101 @@ function Sidebar({
   const avatarSrc = getImageUrl(user?.avatar) || DEFAULT_AVATAR;
 
   const navItems = [
-    {
-      id: "chat",
-      icon: MessageCircle,
-      label: "Tin nhắn",
-      badge: null,
-    },
-    {
-      id: "friends",
-      icon: User,
-      label: "Bạn bè",
-      badge: null,
-    },
-    {
-      id: "requests",
-      icon: Calendar,
-      label: "Lời mời",
-      badge: null,
-    },
-    {
-      id: "group",
-      icon: Users,
-      label: "Nhóm",
-      badge: null,
-    },
-    {
-      id: "search",
-      icon: Search,
-      label: "Tìm kiếm",
-      badge: null,
-    },
+    { id: "chat", icon: MessageCircle, label: "Tin nhắn", badge: null },
+    { id: "friends", icon: User, label: "Bạn bè", badge: null },
+    { id: "requests", icon: Calendar, label: "Lời mời", badge: null },
+    { id: "group", icon: Users, label: "Nhóm", badge: null },
+    { id: "search", icon: Search, label: "Tìm kiếm", badge: null },
   ];
 
-  return (
-    <aside className="zalo-sidebar">
-      <button
-        type="button"
-        className="zalo-avatar-wrap"
-        onClick={onOpenProfile}
-        title={user?.username || "Trang cá nhân"}
-      >
+  const settingsMenu = showSettings ? (
+    <div className="zalo-settings-menu">
+      <div className="zalo-settings-header">
         <img
           src={avatarSrc}
-          className="zalo-avatar"
           alt="avatar"
+          className="w-10 h-10 rounded-full object-cover"
           onError={(e) => {
             e.currentTarget.src = DEFAULT_AVATAR;
           }}
         />
-        <span className="zalo-online-dot" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white truncate">
+            {user?.username || "Người dùng"}
+          </p>
+          <p className="text-xs text-slate-400 truncate">
+            {user?.email || "Tài khoản ChatApp"}
+          </p>
+        </div>
+      </div>
+
+      <button type="button" onClick={onChangePassword} className="zalo-settings-item">
+        <Key size={17} />
+        <span>Đổi mật khẩu</span>
       </button>
 
-      <nav className="zalo-nav">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
+      <button type="button" onClick={onLogout} className="zalo-settings-item danger">
+        <LogOut size={17} />
+        <span>Đăng xuất</span>
+      </button>
+    </div>
+  ) : null;
 
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onSelectTab(item.id)}
-              className={`zalo-nav-btn ${isActive ? "active" : ""}`}
-              title={item.label}
-            >
-              <Icon size={24} strokeWidth={2.2} />
-              {item.badge && <span className="zalo-nav-badge">{item.badge}</span>}
-            </button>
-          );
-        })}
-      </nav>
-
-      <div className="zalo-bottom">
+  return (
+    <>
+      <aside className="zalo-sidebar">
         <button
           type="button"
-          className={`zalo-nav-btn ${activeTab === "notifications" ? "active" : ""}`}
-          title="Thông báo"
-          onClick={() => onSelectTab("notifications")}
+          className="zalo-avatar-wrap"
+          onClick={onOpenProfile}
+          title={user?.username || "Trang cá nhân"}
         >
-          <Bell size={23} strokeWidth={2.2} />
-          {notificationCount > 0 && (
-            <span className="zalo-nav-badge">
-              {notificationCount > 99 ? "99+" : notificationCount}
-            </span>
-          )}
+          <img
+            src={avatarSrc}
+            className="zalo-avatar"
+            alt="avatar"
+            onError={(e) => {
+              e.currentTarget.src = DEFAULT_AVATAR;
+            }}
+          />
+          <span className="zalo-online-dot" />
         </button>
 
-        <div className="relative">
+        <nav className="zalo-nav">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onSelectTab(item.id)}
+                className={`zalo-nav-btn ${isActive ? "active" : ""}`}
+                title={item.label}
+              >
+                <Icon size={24} strokeWidth={2.2} />
+                {item.badge && <span className="zalo-nav-badge">{item.badge}</span>}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="zalo-bottom">
+          <button
+            type="button"
+            className={`zalo-nav-btn ${activeTab === "notifications" ? "active" : ""}`}
+            title="Thông báo"
+            onClick={() => onSelectTab("notifications")}
+          >
+            <Bell size={23} strokeWidth={2.2} />
+            {notificationCount > 0 && (
+              <span className="zalo-nav-badge">
+                {notificationCount > 99 ? "99+" : notificationCount}
+              </span>
+            )}
+          </button>
+
           <button
             type="button"
             className={`zalo-nav-btn ${showSettings ? "active" : ""}`}
@@ -123,50 +132,11 @@ function Sidebar({
           >
             <Settings size={23} strokeWidth={2.2} />
           </button>
-
-          {showSettings && (
-            <div className="zalo-settings-menu">
-              <div className="zalo-settings-header">
-                <img
-                  src={avatarSrc}
-                  alt="avatar"
-                  className="w-10 h-10 rounded-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.src = DEFAULT_AVATAR;
-                  }}
-                />
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">
-                    {user?.username || "Người dùng"}
-                  </p>
-                  <p className="text-xs text-slate-400 truncate">
-                    {user?.email || "Tài khoản ChatApp"}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={onChangePassword}
-                className="zalo-settings-item"
-              >
-                <Key size={17} />
-                <span>Đổi mật khẩu</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={onLogout}
-                className="zalo-settings-item danger"
-              >
-                <LogOut size={17} />
-                <span>Đăng xuất</span>
-              </button>
-            </div>
-          )}
         </div>
-      </div>
-    </aside>
+      </aside>
+
+      {settingsMenu && createPortal(settingsMenu, document.body)}
+    </>
   );
 }
 

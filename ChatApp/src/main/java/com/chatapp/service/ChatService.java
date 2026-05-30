@@ -12,7 +12,10 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import com.chatapp.entity.ConversationState;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -171,10 +174,14 @@ public class ChatService {
     // =========================
     // THU HỒI (DELETE FOR EVERYONE)
     // =========================
-    public Message recallMessage(String messageId) {
+    public Message recallMessage(String messageId, Long userId) {
 
         Message msg = messageRepository.findById(messageId)
                 .orElseThrow(() -> new RuntimeException("Message not found"));
+
+        if (!msg.getSenderId().equals(userId)) {
+            throw new RuntimeException("Bạn chỉ được thu hồi tin nhắn của mình");
+        }
 
         msg.setIsRecalled(true);
         msg.setContent(null);
@@ -185,6 +192,47 @@ public class ChatService {
         messagingTemplate.convertAndSend(
                 "/topic/chat/" + msg.getRoomId() + "/recall",
                 msg.getId()
+        );
+
+        return saved;
+    }
+
+    public Message reactToMessage(String messageId, Long userId, String emoji) {
+        Message msg = messageRepository.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("Message not found"));
+
+        if (Boolean.TRUE.equals(msg.getIsRecalled())) {
+            throw new RuntimeException("Không thể thả cảm xúc vào tin nhắn đã thu hồi");
+        }
+
+        String cleanEmoji = emoji == null ? "" : emoji.trim();
+        if (cleanEmoji.isBlank()) {
+            throw new RuntimeException("Emoji không hợp lệ");
+        }
+
+        Map<String, List<Long>> reactions = msg.getReactions();
+        if (reactions == null) {
+            reactions = new HashMap<>();
+        }
+
+        boolean sameReaction = reactions
+                .getOrDefault(cleanEmoji, List.of())
+                .stream()
+                .anyMatch(id -> id.equals(userId));
+
+        reactions.values().forEach(users -> users.removeIf(id -> id.equals(userId)));
+        reactions.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+
+        if (!sameReaction) {
+            reactions.computeIfAbsent(cleanEmoji, key -> new ArrayList<>()).add(userId);
+        }
+
+        msg.setReactions(reactions);
+        Message saved = messageRepository.save(msg);
+
+        messagingTemplate.convertAndSend(
+                "/topic/chat/" + msg.getRoomId() + "/reaction",
+                saved
         );
 
         return saved;

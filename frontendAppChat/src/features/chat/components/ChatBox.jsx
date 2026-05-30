@@ -1,7 +1,8 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
-import { deleteMessageApi, recallMessageApi } from "../api/chatApi";
+import { deleteMessageApi, reactMessageApi, recallMessageApi } from "../api/chatApi";
 
 const BASE_URL = "http://localhost:8080";
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "😡"];
 
 const ChatBox = memo(
   ({
@@ -32,6 +33,24 @@ const ChatBox = memo(
       return () => window.removeEventListener("click", handleClickOutside);
     }, []);
 
+    useEffect(() => {
+      const handleRealtimeReaction = (event) => {
+        const updated = event.detail;
+        if (!updated?.id && !updated?._id) return;
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            String(m.id || m._id) === String(updated.id || updated._id)
+              ? { ...m, reactions: updated.reactions || {} }
+              : m
+          )
+        );
+      };
+
+      window.addEventListener("chat-message-reaction", handleRealtimeReaction);
+      return () => window.removeEventListener("chat-message-reaction", handleRealtimeReaction);
+    }, [setMessages]);
+
     const visibleMessages = useMemo(() => {
       return messages.filter((msg) => {
         if (!msg.deletedBy) return true;
@@ -40,7 +59,8 @@ const ChatBox = memo(
     }, [messages, currentUserId]);
 
     const normalizedKeyword = searchKeyword.trim().toLowerCase();
-    const getSearchableText = (msg) => String(msg?.content || msg?.text || msg?.originalContent || "");
+    const getSearchableText = (msg) =>
+      String(msg?.content || msg?.text || msg?.originalContent || "");
 
     const scrollToMatch = (matchPos) => {
       if (matchPos < 0 || matchPos >= matchIndexes.length) return;
@@ -114,7 +134,9 @@ const ChatBox = memo(
       try {
         await deleteMessageApi(id);
         setMessages((prev) =>
-          prev.map((m) => (String(m.id) === String(id) ? { ...m, deletedBy: currentUserId } : m))
+          prev.map((m) =>
+            String(m.id || m._id) === String(id) ? { ...m, deletedBy: currentUserId } : m
+          )
         );
       } catch (err) {
         console.log("Delete error:", err);
@@ -125,19 +147,61 @@ const ChatBox = memo(
       try {
         await recallMessageApi(id);
         setMessages((prev) =>
-          prev.map((m) => (String(m.id) === String(id) ? { ...m, isRecalled: true } : m))
+          prev.map((m) =>
+            String(m.id || m._id) === String(id) ? { ...m, isRecalled: true } : m
+          )
         );
       } catch (err) {
         console.log("Recall error:", err);
       }
     };
 
+    const handleReactMessage = async (id, emoji) => {
+      try {
+        const res = await reactMessageApi(id, emoji);
+        const updated = res.data;
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            String(m.id || m._id) === String(id)
+              ? { ...m, reactions: updated.reactions || {} }
+              : m
+          )
+        );
+        setSelectedMessageId(null);
+      } catch (err) {
+        console.log("Reaction error:", err);
+      }
+    };
+
+    const renderReactions = (reactions) => {
+      const entries = Object.entries(reactions || {}).filter(
+        ([, users]) => Array.isArray(users) && users.length
+      );
+
+      if (!entries.length) return null;
+
+      return (
+        <div className="message-reactions">
+          {entries.map(([emoji, users]) => (
+            <span key={emoji} className="message-reaction-pill">
+              {emoji} {users.length}
+            </span>
+          ))}
+        </div>
+      );
+    };
+
     const getFileUrl = (url) => {
       if (!url) return "";
       const normalized = String(url).trim();
       if (normalized.startsWith("/")) return `${BASE_URL}${normalized}`;
-      if (normalized.includes("localhost:5173")) return normalized.replace("localhost:5173", "localhost:8080");
-      if (normalized.includes("10.0.2.2:8080")) return normalized.replace("10.0.2.2:8080", "localhost:8080");
+      if (normalized.includes("localhost:5173")) {
+        return normalized.replace("localhost:5173", "localhost:8080");
+      }
+      if (normalized.includes("10.0.2.2:8080")) {
+        return normalized.replace("10.0.2.2:8080", "localhost:8080");
+      }
       return normalized;
     };
 
@@ -152,12 +216,20 @@ const ChatBox = memo(
                 placeholder="Tìm trong cuộc trò chuyện..."
                 className="message-search-input"
               />
-              <button onClick={jumpPrev} disabled={!matchIndexes.length} className="message-search-btn">↑</button>
-              <button onClick={jumpNext} disabled={!matchIndexes.length} className="message-search-btn">↓</button>
-              <button onClick={onCloseSearch} className="message-search-btn">✕</button>
+              <button onClick={jumpPrev} disabled={!matchIndexes.length} className="message-search-btn">
+                ↑
+              </button>
+              <button onClick={jumpNext} disabled={!matchIndexes.length} className="message-search-btn">
+                ↓
+              </button>
+              <button onClick={onCloseSearch} className="message-search-btn">
+                ✕
+              </button>
             </div>
             <div className="text-xs text-slate-500 mt-1">
-              {matchIndexes.length === 0 ? "Không có kết quả" : `Kết quả: ${activeMatchPos + 1}/${matchIndexes.length}`}
+              {matchIndexes.length === 0
+                ? "Không có kết quả"
+                : `Kết quả: ${activeMatchPos + 1}/${matchIndexes.length}`}
             </div>
           </div>
         )}
@@ -229,15 +301,33 @@ const ChatBox = memo(
                       )}
                     </div>
 
+                    {!msg.isRecalled && !isSystem && renderReactions(msg.reactions)}
+
                     {selectedMessageId === messageId && !isSystem && (
                       <div className={`message-menu ${isMe ? "right-0" : "left-0"}`}>
                         {!msg.isRecalled && !isBot && (
+                          <div className="message-reaction-picker">
+                            {QUICK_REACTIONS.map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleReactMessage(messageId, emoji);
+                                }}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {!msg.isRecalled && !isBot && isMe && (
                           <button onClick={(e) => { e.stopPropagation(); handleRecallMessage(messageId); setSelectedMessageId(null); }}>
                             Thu hồi
                           </button>
                         )}
                         <button onClick={(e) => { e.stopPropagation(); handleDeleteMessage(messageId); setSelectedMessageId(null); }}>
-                          Xoá
+                          Xóa
                         </button>
                         <button onClick={(e) => { e.stopPropagation(); onForwardMessage(msg); setSelectedMessageId(null); }}>
                           Chuyển tiếp

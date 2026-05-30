@@ -1,6 +1,7 @@
 package com.chatapp.controller;
 
 import com.chatapp.dto.AiRewriteRequest;
+import com.chatapp.dto.MessageReactionDTO;
 import com.chatapp.dto.SendMessageDTO;
 import com.chatapp.entity.Message;
 import com.chatapp.entity.User;
@@ -63,8 +64,19 @@ public class ChatController {
     // RECALL MESSAGE
     // =========================
     @PutMapping("/message/recall/{id}")
-    public void recallMessage(@PathVariable String id) {
-        chatService.recallMessage(id); // 🔥 service send socket
+    public void recallMessage(@PathVariable String id, Principal principal) {
+        Long userId = Long.parseLong(principal.getName());
+        chatService.recallMessage(id, userId); // 🔥 service send socket
+    }
+
+    @PutMapping("/message/{id}/reaction")
+    public Message reactToMessage(
+            @PathVariable String id,
+            @RequestBody MessageReactionDTO request,
+            Principal principal) {
+
+        Long userId = Long.parseLong(principal.getName());
+        return chatService.reactToMessage(id, userId, request.getEmoji());
     }
 
     @DeleteMapping("/conversation/{roomId}")

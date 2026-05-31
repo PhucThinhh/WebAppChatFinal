@@ -8,6 +8,7 @@ import com.chatapp.entity.GroupRole;
 import com.chatapp.service.GroupService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -79,5 +80,25 @@ public class GroupController {
             @RequestParam Long userId
     ) {
         groupService.leaveGroup(groupId, userId);
+    }
+
+    @PutMapping("/rename")
+    public Group rename(
+            @RequestParam String groupId,
+            @RequestParam String name,
+            Authentication authentication
+    ) {
+        Long currentUserId = Long.parseLong(authentication.getName());
+        return groupService.renameGroup(groupId, name, currentUserId);
+    }
+
+    @PostMapping(value = "/avatar", consumes = "multipart/form-data")
+    public Group updateAvatar(
+            @RequestParam String groupId,
+            @RequestParam("file") MultipartFile file,
+            Authentication authentication
+    ) {
+        Long currentUserId = Long.parseLong(authentication.getName());
+        return groupService.updateGroupAvatar(groupId, file, currentUserId);
     }
 }

@@ -20,6 +20,7 @@ function CallModal({
   incomingOffer = null,
   isIncoming = false,
   callId: providedCallId,
+  roomId,
   onClose,
 }) {
   const localVideoRef = useRef(null);
@@ -50,6 +51,7 @@ function CallModal({
     sendCallSignal({
       type,
       callId,
+      roomId,
       mode,
       fromUserId: Number(currentUserId),
       toUserId: Number(targetUserId),
@@ -69,10 +71,10 @@ function CallModal({
     startedRef.current = false;
   };
 
-  const closeCall = (notify = true) => {
+  const closeCall = (notify = true, signalType = "end") => {
     if (endedRef.current) return;
     endedRef.current = true;
-    if (notify) sendSignal("end");
+    if (notify) sendSignal(signalType);
     cleanup();
     onClose?.();
   };
@@ -204,6 +206,38 @@ function CallModal({
     };
   }, []);
 
+  useEffect(() => {
+    if (!isIncoming || accepted) return;
+
+    let audioContext;
+    let timer;
+
+    const ring = () => {
+      try {
+        audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+
+        oscillator.frequency.value = 880;
+        gain.gain.value = 0.04;
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.18);
+      } catch {
+        window.clearInterval(timer);
+      }
+    };
+
+    ring();
+    timer = window.setInterval(ring, 1400);
+
+    return () => {
+      window.clearInterval(timer);
+      audioContext?.close?.();
+    };
+  }, [isIncoming, accepted]);
+
   const toggleMic = () => {
     const next = !micOn;
     setMicOn(next);
@@ -257,7 +291,7 @@ function CallModal({
         <div className="call-actions">
           {isIncoming && !accepted ? (
             <>
-              <button className="call-action end" onClick={() => closeCall(true)}>
+              <button className="call-action end" onClick={() => closeCall(true, "reject")}>
                 <PhoneOff size={24} />
               </button>
               <button className="call-action accept" onClick={acceptIncomingCall}>

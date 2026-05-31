@@ -1,7 +1,7 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import { deleteMessageApi, reactMessageApi, recallMessageApi } from "../api/chatApi";
+import { getBackendUrl } from "../../../config/env";
 
-const BASE_URL = "http://localhost:8080";
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "😡"];
 
 const ChatBox = memo(
@@ -13,6 +13,8 @@ const ChatBox = memo(
     onForwardMessage,
     showSearch = false,
     onCloseSearch,
+    groupMembers = [],
+    isGroup = false,
   }) => {
     const [selectedMessageId, setSelectedMessageId] = useState(null);
     const [previewPdf, setPreviewPdf] = useState(null);
@@ -192,15 +194,66 @@ const ChatBox = memo(
       );
     };
 
+    const getMessageStatusLabel = (msg) => {
+      const seenBy = Array.isArray(msg?.seenBy) ? msg.seenBy : [];
+      if (seenBy.some((id) => Number(id) !== Number(currentUserId))) {
+        return "✓✓ Đã xem";
+      }
+
+      if (String(msg?.status || "").toUpperCase() === "SEEN") {
+        return "✓✓ Đã xem";
+      }
+
+      return "✓ Đã gửi";
+    };
+
+    const memberById = useMemo(() => {
+      return new Map(
+        groupMembers
+          .filter((member) => member?.userId || member?.id)
+          .map((member) => [Number(member.userId || member.id), member])
+      );
+    }, [groupMembers]);
+
+    const renderSeenAvatars = (msg, isMe, isSystem) => {
+      if (!isGroup || !isMe || isSystem || msg.isRecalled) return null;
+
+      const viewers = (Array.isArray(msg?.seenBy) ? msg.seenBy : [])
+        .map((id) => Number(id))
+        .filter((id) => id && id !== Number(currentUserId))
+        .map((id) => memberById.get(id))
+        .filter(Boolean)
+        .slice(0, 5);
+
+      if (!viewers.length) return null;
+
+      return (
+        <div className="message-seen-avatars">
+          {viewers.map((member) => (
+            <img
+              key={member.userId || member.id}
+              src={getFileUrl(member.avatar)}
+              title={member.username}
+              alt={member.username || "seen"}
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
+          ))}
+        </div>
+      );
+    };
+
     const getFileUrl = (url) => {
       if (!url) return "";
       const normalized = String(url).trim();
-      if (normalized.startsWith("/")) return `${BASE_URL}${normalized}`;
+      const backendUrl = getBackendUrl();
+      if (normalized.startsWith("/")) return `${backendUrl}${normalized}`;
       if (normalized.includes("localhost:5173")) {
-        return normalized.replace("localhost:5173", "localhost:8080");
+        return normalized.replace(/^https?:\/\/localhost:5173/i, backendUrl);
       }
       if (normalized.includes("10.0.2.2:8080")) {
-        return normalized.replace("10.0.2.2:8080", "localhost:8080");
+        return normalized.replace(/^https?:\/\/10\.0\.2\.2:8080/i, backendUrl);
       }
       return normalized;
     };
@@ -343,6 +396,12 @@ const ChatBox = memo(
                         : msg.time}
                     </span>
                   )}
+                  {isMe && !isSystem && !msg.isRecalled && (
+                    <span className={`message-status ${getMessageStatusLabel(msg).includes("Đã xem") ? "seen" : ""}`}>
+                      {getMessageStatusLabel(msg)}
+                    </span>
+                  )}
+                  {renderSeenAvatars(msg, isMe, isSystem)}
                 </div>
               </div>
             );

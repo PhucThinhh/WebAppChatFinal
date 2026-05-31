@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://localhost:8080";
+import { getBackendUrl } from "../config/env";
 
 export function getImageUrl(path) {
   if (!path) return "";
@@ -13,10 +13,11 @@ export function getImageUrl(path) {
   }
 
   const fixedPath = path.replaceAll("\\", "/");
+  const apiBaseUrl = getBackendUrl();
 
   if (fixedPath.startsWith("/")) {
-    return `${API_BASE_URL}${fixedPath}`;
+    return `${apiBaseUrl}${fixedPath}`;
   }
 
-  return `${API_BASE_URL}/${fixedPath}`;
+  return `${apiBaseUrl}/${fixedPath}`;
 }

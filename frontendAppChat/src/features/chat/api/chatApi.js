@@ -58,7 +58,7 @@ export const getBlockStatusApi = (targetId) => {
 };
 
 export const createGroupApi = (data) => {
-  return axiosClient.post("http://localhost:8080/api/chat/group/create", data);
+  return axiosClient.post("/chat/group/create", data);
 };
 
 export const getMyGroupsApi = (userId) => {
@@ -97,4 +97,17 @@ export const leaveGroupApi = (groupId, userId) => {
   return axiosClient.delete(
     `/chat/group/leave?groupId=${groupId}&userId=${userId}`
   );
+};
+
+export const renameGroupApi = (groupId, name) => {
+  return axiosClient.put(`/chat/group/rename?groupId=${groupId}&name=${encodeURIComponent(name)}`);
+};
+
+export const updateGroupAvatarApi = (groupId, file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return axiosClient.post(`/chat/group/avatar?groupId=${groupId}`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
 };

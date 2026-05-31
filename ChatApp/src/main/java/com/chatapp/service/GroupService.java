@@ -14,8 +14,14 @@ import com.chatapp.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.util.UUID;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -47,6 +53,7 @@ public class GroupService {
         Group group = groupRepo.save(
                 Group.builder()
                         .name(dto.getName())
+                        .avatar(null)
                         .createdBy(dto.getCreatorId())
                         .createdAt(LocalDateTime.now())
                         .build()
@@ -298,6 +305,59 @@ public class GroupService {
         notifyGroupChanged(Set.of(userId), "GROUP_MEMBER_REMOVED", groupId);
     }
 
+    public Group renameGroup(String groupId, String name, Long currentUserId) {
+        ensureCanManageGroup(groupId, currentUserId);
+
+        String cleanName = name == null ? "" : name.trim();
+        if (cleanName.isBlank()) {
+            throw new RuntimeException("Tên nhóm không được để trống");
+        }
+
+        Group group = groupRepo.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Group không tồn tại"));
+        String oldName = group.getName();
+        group.setName(cleanName);
+        Group saved = groupRepo.save(group);
+
+        publishGroupSystemMessage(groupId, getDisplayName(currentUserId) + " đã đổi tên nhóm từ \"" + oldName + "\" thành \"" + cleanName + "\"");
+        notifyGroupChanged(getGroupUserIds(groupId), "GROUP_UPDATED", groupId);
+        return saved;
+    }
+
+    public Group updateGroupAvatar(String groupId, MultipartFile file, Long currentUserId) {
+        ensureCanManageGroup(groupId, currentUserId);
+
+        if (file == null || file.isEmpty()) {
+            throw new RuntimeException("File ảnh không hợp lệ");
+        }
+
+        Group group = groupRepo.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Group không tồn tại"));
+
+        try {
+            Path uploadDir = Paths.get("uploads");
+            Files.createDirectories(uploadDir);
+
+            String originalName = file.getOriginalFilename();
+            String safeName = originalName == null
+                    ? "group-avatar.jpg"
+                    : Paths.get(originalName).getFileName().toString();
+            safeName = safeName.replaceAll("[^a-zA-Z0-9._-]", "_");
+            String filename = System.currentTimeMillis() + "_" + UUID.randomUUID() + "_" + safeName;
+            Path target = uploadDir.resolve(filename);
+            Files.write(target, file.getBytes());
+
+            group.setAvatar("/uploads/" + filename);
+            Group saved = groupRepo.save(group);
+
+            publishGroupSystemMessage(groupId, getDisplayName(currentUserId) + " đã đổi ảnh đại diện nhóm");
+            notifyGroupChanged(getGroupUserIds(groupId), "GROUP_UPDATED", groupId);
+            return saved;
+        } catch (IOException e) {
+            throw new RuntimeException("Không lưu được ảnh nhóm");
+        }
+    }
+
 
     private void notifyGroupChanged(Set<Long> userIds, String action, String groupId) {
         if (userIds == null || userIds.isEmpty()) return;
@@ -315,6 +375,22 @@ public class GroupService {
                                 payload
                         )
                 );
+    }
+
+    private void ensureCanManageGroup(String groupId, Long currentUserId) {
+        GroupMember me = memberRepo.findByGroupIdAndUserId(groupId, currentUserId)
+                .orElseThrow(() -> new RuntimeException("Không thuộc nhóm"));
+
+        if (me.getRole() != GroupRole.ADMIN && me.getRole() != GroupRole.OWNER) {
+            throw new RuntimeException("Không có quyền");
+        }
+    }
+
+    private Set<Long> getGroupUserIds(String groupId) {
+        return memberRepo.findByGroupId(groupId).stream()
+                .map(GroupMember::getUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
     }
 
     private String getDisplayName(Long userId) {

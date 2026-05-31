@@ -1,5 +1,6 @@
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
+import { getWsUrl } from "../../../config/env";
 
 let stompClient = null;
 let connectionState = "DISCONNECTED";
@@ -27,7 +28,7 @@ export const connectSocket = (userId, onReady) => {
 
   stompClient = new Client({
     webSocketFactory: () =>
-      new SockJS(`http://localhost:8080/ws?userId=${userId}`),
+      new SockJS(`${getWsUrl()}?userId=${userId}`),
 
     reconnectDelay: 5000,
 
@@ -46,13 +47,14 @@ export const connectSocket = (userId, onReady) => {
           cb.deleteCallback,
           cb.recallCallback,
           cb.moderationCallback,
-          cb.reactionCallback
+          cb.reactionCallback,
+          cb.seenCallback
         );
       });
 
       // restore pending rooms
       Object.entries(pendingRooms).forEach(([roomId, cb]) => {
-        internalJoinRoom(roomId, cb.onMessage, cb.onDelete, cb.onRecall, cb.onModeration, cb.onReaction);
+        internalJoinRoom(roomId, cb.onMessage, cb.onDelete, cb.onRecall, cb.onModeration, cb.onReaction, cb.onSeen);
       });
 
       pendingRooms = {};
@@ -74,7 +76,7 @@ export const connectSocket = (userId, onReady) => {
 };
 
 // ================= INTERNAL JOIN ROOM =================
-const internalJoinRoom = (roomId, onMessage, onDelete, onRecall, onModeration, onReaction) => {
+const internalJoinRoom = (roomId, onMessage, onDelete, onRecall, onModeration, onReaction, onSeen) => {
   if (!stompClient) return;
 
   const existing = activeRooms[roomId];
@@ -84,6 +86,7 @@ const internalJoinRoom = (roomId, onMessage, onDelete, onRecall, onModeration, o
     existing.recallSub?.unsubscribe();
     existing.moderationSub?.unsubscribe();
     existing.reactionSub?.unsubscribe();
+    existing.seenSub?.unsubscribe();
     delete activeRooms[roomId];
   }
 
@@ -150,32 +153,46 @@ const internalJoinRoom = (roomId, onMessage, onDelete, onRecall, onModeration, o
     }
   );
 
+  const seenSub = stompClient.subscribe(
+    `/topic/chat/${roomId}/seen`,
+    (msg) => {
+      try {
+        const data = JSON.parse(msg.body);
+        onSeen?.(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Parse seen error:", err);
+      }
+    }
+  );
+
   activeRooms[roomId] = {
     messageSub,
     deleteSub,
     recallSub,
     moderationSub,
     reactionSub,
+    seenSub,
     callback: onMessage,
     deleteCallback: onDelete,
     recallCallback: onRecall,
     moderationCallback: onModeration,
     reactionCallback: onReaction,
+    seenCallback: onSeen,
   };
 
   console.log("📌 Joined room:", roomId);
 };
 
 // ================= JOIN ROOM =================
-export const joinRoom = (roomId, onMessage, onDelete, onRecall, onModeration, onReaction) => {
+export const joinRoom = (roomId, onMessage, onDelete, onRecall, onModeration, onReaction, onSeen) => {
   if (!stompClient) return;
 
   if (connectionState !== "CONNECTED") {
-    pendingRooms[roomId] = { onMessage, onDelete, onRecall, onModeration, onReaction };
+    pendingRooms[roomId] = { onMessage, onDelete, onRecall, onModeration, onReaction, onSeen };
     return;
   }
 
-  internalJoinRoom(roomId, onMessage, onDelete, onRecall, onModeration, onReaction);
+  internalJoinRoom(roomId, onMessage, onDelete, onRecall, onModeration, onReaction, onSeen);
 };
 
 // ================= LEAVE ROOM =================
@@ -186,6 +203,7 @@ export const leaveRoom = (roomId) => {
     activeRooms[roomId].recallSub?.unsubscribe();
     activeRooms[roomId].moderationSub?.unsubscribe();
     activeRooms[roomId].reactionSub?.unsubscribe();
+    activeRooms[roomId].seenSub?.unsubscribe();
 
     delete activeRooms[roomId];
 

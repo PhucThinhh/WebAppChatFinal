@@ -63,13 +63,18 @@ public class ChatService {
         boolean isTextMessage = dto.getType() == null || "TEXT".equalsIgnoreCase(dto.getType());
         boolean isAiCommand = textContent.startsWith("/ai");
 
-        if (isTextMessage && !isAiCommand && toxicModerationService.isToxic(textContent)) {
+        ToxicModerationService.ModerationResult moderation = ToxicModerationService.ModerationResult.allowed();
+        if (isTextMessage && !isAiCommand) {
+            moderation = toxicModerationService.moderate(dto.getSenderId(), roomId, textContent);
+        }
+
+        if (moderation.isBlocked()) {
             Message warning = Message.builder()
                     .id("violation-" + System.currentTimeMillis())
                     .senderId(dto.getSenderId())
                     .receiverId(dto.getReceiverId())
                     .roomId(roomId)
-                    .content(toxicModerationService.getViolationMessage())
+                    .content(moderation.getMessage())
                     .type("VIOLATION")
                     .createdAt(LocalDateTime.now())
                     .build();
@@ -92,6 +97,8 @@ public class ChatService {
                 .fileUrl(dto.getFileUrl())
                 .isDeleted(false)
                 .isRecalled(false)
+                .status("SENT")
+                .seenBy(new ArrayList<>(List.of(dto.getSenderId())))
                 .createdAt(LocalDateTime.now())
                 .build();
 
@@ -149,9 +156,28 @@ public class ChatService {
                 messageRepository.findByRoomIdOrderByCreatedAtAsc(roomId);
 
         if (state != null && Boolean.TRUE.equals(state.getIsDeleted())) {
-            return messages.stream()
+            messages = messages.stream()
                     .filter(m -> m.getCreatedAt().isAfter(state.getDeletedAt()))
                     .toList();
+        }
+
+        List<Message> seenUpdates = messages.stream()
+                .filter(m -> m.getSenderId() != null)
+                .filter(m -> !m.getSenderId().equals(userId))
+                .filter(m -> !Boolean.TRUE.equals(m.getIsRecalled()))
+                .filter(m -> m.getSeenBy() == null || !m.getSeenBy().contains(userId))
+                .toList();
+
+        if (!seenUpdates.isEmpty()) {
+            seenUpdates.forEach(m -> {
+                List<Long> seenBy = m.getSeenBy() == null ? new ArrayList<>() : new ArrayList<>(m.getSeenBy());
+                seenBy.add(userId);
+                m.setSeenBy(seenBy);
+                m.setStatus("SEEN");
+            });
+
+            messageRepository.saveAll(seenUpdates);
+            messagingTemplate.convertAndSend("/topic/chat/" + roomId + "/seen", seenUpdates);
         }
 
         return messages;

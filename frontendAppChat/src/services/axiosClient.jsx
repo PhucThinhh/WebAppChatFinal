@@ -1,7 +1,8 @@
 import axios from "axios";
+import { getApiUrl } from "../config/env";
 
 const axiosClient = axios.create({
-  baseURL: "http://localhost:8080/api",
+  baseURL: getApiUrl(),
 });
 
 // 👉 REQUEST: gắn token từ localStorage

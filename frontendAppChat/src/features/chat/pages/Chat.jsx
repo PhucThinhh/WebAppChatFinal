@@ -1,16 +1,18 @@
   import { useEffect, useState, useMemo } from "react";
   import { useNavigate } from "react-router-dom";
   import { toast } from "react-toastify";
-  import { Phone, Video, ShieldCheck, Info, BellOff, Pin, UserPlus } from "lucide-react";
+  import { Phone, Video, ShieldCheck, Info, BellOff, Pin, UserPlus, Camera, Pencil } from "lucide-react";
 
   import Sidebar from "../components/Sidebar";
   import ChatBox from "../components/ChatBox";
   import ChatInput from "../components/ChatInput";
   import CreateGroup from "../components/CreateGroup";
 import CallModal from "../components/CallModal";
-import { checkToxicMessage, VIOLATION_MESSAGE } from "../../../utils/moderation";
+import { getBackendUrl } from "../../../config/env";
 import { getImageUrl } from "../../../utils/imageUrl";
 import axiosClient from "../../../services/axiosClient";
+
+const VIOLATION_MESSAGE = "Tin nhắn của bạn bị vi phạm tiêu chuẩn cộng đồng.";
 
   import FriendsList from "../../friend/components/FriendsList";
   import FriendRequests from "../../friend/components/FriendRequests";
@@ -42,6 +44,8 @@ import axiosClient from "../../../services/axiosClient";
     deleteGroupApi,
     updateRoleApi,
     leaveGroupApi,
+    renameGroupApi,
+    updateGroupAvatarApi,
   } from "../api/chatApi";
   import { getFriendRequestsApi, getFriendsApi } from "../../friend/api/friendApi";
 
@@ -81,6 +85,7 @@ import axiosClient from "../../../services/axiosClient";
     const [showConversationInfo, setShowConversationInfo] = useState(false);
     const [showGroupMenu, setShowGroupMenu] = useState(false);
     const [groupMemberCount, setGroupMemberCount] = useState(0);
+    const [groupMembers, setGroupMembers] = useState([]);
     const [showViewMembersModal, setShowViewMembersModal] = useState(false);
     const [viewMembersList, setViewMembersList] = useState([]);
     const [viewMembersLoading, setViewMembersLoading] = useState(false);
@@ -107,6 +112,8 @@ import axiosClient from "../../../services/axiosClient";
 
     const [conversations, setConversations] = useState([]);
     const [selectedConversationId, setSelectedConversationId] = useState(null);
+    const [conversationSearch, setConversationSearch] = useState("");
+    const [conversationFilter, setConversationFilter] = useState("all");
     const [mutedConversationIds, setMutedConversationIds] = useState(() => new Set());
     const [pinnedConversationIds, setPinnedConversationIds] = useState(() => new Set());
 
@@ -456,12 +463,13 @@ import axiosClient from "../../../services/axiosClient";
           id: `group_${group.id}`,
           type: "GROUP",
           name: group.name,
-          avatar: DEFAULT_AVATAR,
+          avatar: resolveAvatar(group.avatar),
           roomId: `group_${group.id}`,
           unreadCount: 0,
           targetGroup: {
             id: group.id,
             name: group.name,
+            avatar: group.avatar,
           },
         }));
 
@@ -533,6 +541,7 @@ import axiosClient from "../../../services/axiosClient";
             incomingOffer: payload.signal,
             isIncoming: true,
             callId: payload.callId,
+            roomId: payload.roomId,
           });
         });
 
@@ -634,12 +643,13 @@ import axiosClient from "../../../services/axiosClient";
         id: `group_${group.id}`,
         type: "GROUP",
         name: group.name,
-        avatar: DEFAULT_AVATAR,
+        avatar: resolveAvatar(group.avatar),
         roomId: `group_${group.id}`,
         unreadCount: 0,
         targetGroup: {
           id: group.id,
           name: group.name,
+          avatar: group.avatar,
         },
       };
 
@@ -648,6 +658,7 @@ import axiosClient from "../../../services/axiosClient";
       setSelectedGroup({
         id: group.id,
         name: group.name,
+        avatar: group.avatar,
       });
       setIsRemovedFromGroup(false);
       setSelectedUser(null);
@@ -688,12 +699,13 @@ import axiosClient from "../../../services/axiosClient";
             id: `group_${group.id}`,
             type: "GROUP",
             name: group.name,
-            avatar: DEFAULT_AVATAR,
+            avatar: resolveAvatar(group.avatar),
             roomId: `group_${group.id}`,
             unreadCount: 0,
             targetGroup: {
               id: group.id,
               name: group.name,
+              avatar: group.avatar,
             },
           }));
 
@@ -732,6 +744,9 @@ import axiosClient from "../../../services/axiosClient";
             type: msg.type,
             originalSenderId: msg.originalSenderId,
             originalContent: msg.originalContent,
+            reactions: msg.reactions || {},
+            status: msg.status,
+            seenBy: msg.seenBy || [],
           }));
 
           setMessages(history);
@@ -773,6 +788,7 @@ import axiosClient from "../../../services/axiosClient";
 
       if (!selectedGroup?.id) {
         setGroupMemberCount(0);
+        setGroupMembers([]);
         return;
       }
 
@@ -782,9 +798,16 @@ import axiosClient from "../../../services/axiosClient";
         try {
           const res = await getGroupMembersApi(selectedGroup.id);
           const n = Array.isArray(res.data) ? res.data.length : 0;
-          if (!cancelled) setGroupMemberCount(n);
+          if (!cancelled) {
+            const members = Array.isArray(res.data) ? res.data : [];
+            setGroupMembers(members);
+            setGroupMemberCount(n);
+          }
         } catch {
-          if (!cancelled) setGroupMemberCount(0);
+          if (!cancelled) {
+            setGroupMembers([]);
+            setGroupMemberCount(0);
+          }
         }
       })();
 
@@ -858,6 +881,17 @@ import axiosClient from "../../../services/axiosClient";
               : `private_${incomingRoomId}`;
 
             moveConversationToTop(incomingRoomId);
+            setConversations((prev) =>
+              prev.map((conversation) =>
+                conversation.roomId === incomingRoomId
+                  ? {
+                      ...conversation,
+                      lastMessage: summarizeLastMessage(message),
+                      lastMessageAt: message.createdAt || new Date().toISOString(),
+                    }
+                  : conversation
+              )
+            );
 
             const isActiveConversation =
               selectedConversationId === incomingConversationId;
@@ -875,6 +909,8 @@ import axiosClient from "../../../services/axiosClient";
                 originalSenderId: message.originalSenderId,
                 originalContent: message.originalContent,
                 reactions: message.reactions || {},
+                status: message.status,
+                seenBy: message.seenBy || [],
               });
               return;
             }
@@ -948,6 +984,29 @@ import axiosClient from "../../../services/axiosClient";
             });
 
             toast.warning("Tin nhắn đã bị xoá do vi phạm tiêu chuẩn cộng đồng");
+          },
+          null,
+          (seenMessages) => {
+            const activeConversation = conversations.find(
+              (conversation) => conversation.id === selectedConversationId
+            );
+
+            if (!activeConversation || activeConversation.roomId !== joinedRoomId) {
+              return;
+            }
+
+            const seenById = new Map(
+              seenMessages.map((message) => [String(message.id || message._id), message])
+            );
+
+            setMessages((prev) =>
+              prev.map((message) => {
+                const updated = seenById.get(String(message.id || message._id));
+                return updated
+                  ? { ...message, status: updated.status, seenBy: updated.seenBy || [] }
+                  : message;
+              })
+            );
           }
         );
       });
@@ -983,24 +1042,6 @@ import axiosClient from "../../../services/axiosClient";
       if (!content) return;
       if (!currentUserId || (!selectedUser && !selectedGroup)) return;
 
-      const moderation = checkToxicMessage(content);
-      if (moderation.toxic) {
-        addMessage({
-          id: `violation-${Date.now()}`,
-          senderId: Number(currentUserId),
-          receiverId: selectedUser?.id || null,
-          roomId,
-          content: VIOLATION_MESSAGE,
-          type: "VIOLATION",
-          createdAt: new Date().toISOString(),
-          isLocalOnly: true,
-        });
-
-        setInput("");
-        toast.warning("Tin nhắn đã bị xoá do vi phạm tiêu chuẩn cộng đồng");
-        return;
-      }
-
       const msg = {
         senderId: Number(currentUserId),
         receiverId: selectedUser?.id || null,
@@ -1010,13 +1051,24 @@ import axiosClient from "../../../services/axiosClient";
       };
 
       sendMessageSocket(msg);
+      setConversations((prev) =>
+        prev.map((conversation) =>
+          conversation.roomId === roomId
+            ? {
+                ...conversation,
+                lastMessage: summarizeLastMessage(msg),
+                lastMessageAt: new Date().toISOString(),
+              }
+            : conversation
+        )
+      );
 
       if (selectedGroup) {
         upsertConversation({
           id: `group_${selectedGroup.id}`,
           type: "GROUP",
           name: selectedGroup.name,
-          avatar: DEFAULT_AVATAR,
+          avatar: resolveAvatar(selectedGroup.avatar),
           roomId: `group_${selectedGroup.id}`,
           targetGroup: selectedGroup,
         });
@@ -1444,12 +1496,70 @@ import axiosClient from "../../../services/axiosClient";
       }
     };
 
+    const handleRenameGroup = async () => {
+      if (!selectedGroup?.id) return;
+
+      const nextName = window.prompt("Nhập tên nhóm mới", selectedGroup.name || "");
+      if (!nextName || !nextName.trim()) return;
+
+      try {
+        const res = await renameGroupApi(selectedGroup.id, nextName.trim());
+        const updated = res.data;
+        const avatar = resolveAvatar(updated.avatar);
+
+        setSelectedGroup((prev) => ({ ...prev, name: updated.name, avatar: updated.avatar }));
+        setConversations((prev) =>
+          prev.map((item) =>
+            item.id === `group_${updated.id}`
+              ? {
+                  ...item,
+                  name: updated.name,
+                  avatar,
+                  targetGroup: { ...item.targetGroup, name: updated.name, avatar: updated.avatar },
+                }
+              : item
+          )
+        );
+        toast.success("Đã đổi tên nhóm");
+      } catch (error) {
+        toast.error(error?.response?.data || "Đổi tên nhóm thất bại");
+      }
+    };
+
+    const handleChangeGroupAvatar = async (event) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      if (!selectedGroup?.id || !file) return;
+
+      try {
+        const res = await updateGroupAvatarApi(selectedGroup.id, file);
+        const updated = res.data;
+        const avatar = resolveAvatar(updated.avatar);
+
+        setSelectedGroup((prev) => ({ ...prev, avatar: updated.avatar }));
+        setConversations((prev) =>
+          prev.map((item) =>
+            item.id === `group_${updated.id}`
+              ? {
+                  ...item,
+                  avatar,
+                  targetGroup: { ...item.targetGroup, avatar: updated.avatar },
+                }
+              : item
+          )
+        );
+        toast.success("Đã đổi ảnh nhóm");
+      } catch (error) {
+        toast.error(error?.response?.data || "Đổi ảnh nhóm thất bại");
+      }
+    };
+
     const currentTitle = selectedGroup
       ? selectedGroup.name
       : selectedUser?.username || "Cuộc trò chuyện";
 
     const currentAvatar = selectedGroup
-      ? DEFAULT_AVATAR
+      ? resolveAvatar(selectedGroup.avatar)
       : resolveAvatar(selectedUser?.avatar);
 
     const mediaMessages = useMemo(
@@ -1460,6 +1570,39 @@ import axiosClient from "../../../services/axiosClient";
           .reverse(),
       [messages]
     );
+
+    const visibleConversations = useMemo(() => {
+      const keyword = conversationSearch.trim().toLowerCase();
+
+      return conversations
+        .filter((item) => {
+          if (conversationFilter === "unread") return Number(item.unreadCount || 0) > 0;
+          if (conversationFilter === "group") return item.type === "GROUP";
+          if (conversationFilter === "private") return item.type !== "GROUP";
+          return true;
+        })
+        .filter((item) => {
+          if (!keyword) return true;
+          return String(item.name || "").toLowerCase().includes(keyword);
+        });
+    }, [conversationFilter, conversationSearch, conversations]);
+
+    const formatConversationTime = (value) => {
+      if (!value) return "";
+      try {
+        return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      } catch {
+        return "";
+      }
+    };
+
+    const summarizeLastMessage = (message) => {
+      const type = String(message?.type || "").toUpperCase();
+      if (type === "FILE") return "Đã gửi một tệp";
+      if (type === "SYSTEM") return message?.content || "Cập nhật hội thoại";
+      if (type === "VIOLATION") return "Tin nhắn vi phạm đã bị chặn";
+      return String(message?.content || "").trim() || "Tin nhắn mới";
+    };
 
     return (
       <div className="w-screen h-screen flex app-shell overflow-hidden text-slate-800 font-sans relative">
@@ -1487,11 +1630,37 @@ import axiosClient from "../../../services/axiosClient";
               <div className="safe-badge"><ShieldCheck size={16} /> AI</div>
             </div>
 
+            <div className="conversation-tools">
+              <input
+                value={conversationSearch}
+                onChange={(e) => setConversationSearch(e.target.value)}
+                className="conversation-search-input"
+                placeholder="Tìm hội thoại"
+              />
+              <div className="conversation-filter-tabs">
+                {[
+                  ["all", "Tất cả"],
+                  ["unread", "Chưa đọc"],
+                  ["private", "Cá nhân"],
+                  ["group", "Nhóm"],
+                ].map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setConversationFilter(id)}
+                    className={conversationFilter === id ? "active" : ""}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="conversation-list flex-1 overflow-y-auto p-3 space-y-2">
-              {conversations.length === 0 ? (
+              {visibleConversations.length === 0 ? (
                 <div className="empty-conversation-note">Chưa có cuộc trò chuyện nào</div>
               ) : (
-                conversations.map((item) => {
+                visibleConversations.map((item) => {
                   const isActive = selectedConversationId === item.id;
 
                   return (
@@ -1512,12 +1681,18 @@ import axiosClient from "../../../services/axiosClient";
                       <div className="min-w-0 flex-1">
                         <div className="conversation-name-row">
                           <span className="truncate">{item.name}</span>
+                          <span className="conversation-time">
+                            {formatConversationTime(item.lastMessageAt)}
+                          </span>
                           {item.unreadCount > 0 && (
                             <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-blue-500 text-white text-[11px] leading-[22px] text-center font-semibold">
                               {item.unreadCount > 99 ? "99+" : item.unreadCount}
                             </span>
                           )}
                         </div>
+                        {item.lastMessage && (
+                          <div className="conversation-meta">{item.lastMessage}</div>
+                        )}
                         <div className="conversation-meta">
                           {item.type === "GROUP" ? "Nhóm chat" : "Chat cá nhân"}
                         </div>
@@ -1655,6 +1830,7 @@ import axiosClient from "../../../services/axiosClient";
                               targetAvatar: currentAvatar,
                               callerName: user?.username || "Người gọi",
                               callerAvatar: user?.avatar,
+                              roomId,
                             })
                           }
                           className="header-action-btn"
@@ -1674,6 +1850,7 @@ import axiosClient from "../../../services/axiosClient";
                               targetAvatar: currentAvatar,
                               callerName: user?.username || "Người gọi",
                               callerAvatar: user?.avatar,
+                              roomId,
                             })
                           }
                           className="header-action-btn"
@@ -1795,6 +1972,8 @@ import axiosClient from "../../../services/axiosClient";
                     onForwardMessage={handleForwardClick}
                     showSearch={showMessageSearch}
                     onCloseSearch={() => setShowMessageSearch(false)}
+                    isGroup={Boolean(selectedGroup)}
+                    groupMembers={groupMembers}
                   />
                 </div>
 
@@ -1852,6 +2031,24 @@ import axiosClient from "../../../services/axiosClient";
                             ? "Đang hoạt động"
                             : "Ngoại tuyến"}
                       </p>
+                      {selectedGroup && (
+                        <div className="group-edit-actions">
+                          <button type="button" onClick={handleRenameGroup} title="Đổi tên nhóm">
+                            <Pencil size={16} />
+                            <span>Đổi tên</span>
+                          </button>
+                          <label title="Đổi ảnh nhóm">
+                            <Camera size={16} />
+                            <span>Đổi ảnh</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleChangeGroupAvatar}
+                              hidden
+                            />
+                          </label>
+                        </div>
+                      )}
                     </div>
 
                     <div
@@ -1898,7 +2095,7 @@ import axiosClient from "../../../services/axiosClient";
                               key={message.id || message._id || message.fileUrl}
                               src={
                                 String(message.fileUrl).startsWith("/")
-                                  ? `http://localhost:8080${message.fileUrl}`
+                                  ? `${getBackendUrl()}${message.fileUrl}`
                                   : message.fileUrl
                               }
                               alt=""

@@ -52,4 +52,8 @@ public class Message {
 
     private Map<String, List<Long>> reactions;
 
+    private String status;
+
+    private List<Long> seenBy;
+
 }

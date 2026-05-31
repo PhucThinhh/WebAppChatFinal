@@ -22,6 +22,8 @@ public class Group {
 
     private String name;
 
+    private String avatar;
+
     private Long createdBy;
 
     private LocalDateTime createdAt;

@@ -1,10 +1,8 @@
 services:
   - type: web
     name: kindchat-api
-    runtime: java
+    runtime: docker
     rootDir: ChatApp
-    buildCommand: ./mvnw clean package -DskipTests
-    startCommand: java -jar target/*.jar
     envVars:
       - key: PORT
         value: 8080

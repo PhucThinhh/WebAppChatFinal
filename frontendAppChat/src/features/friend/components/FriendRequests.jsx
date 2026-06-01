@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import {
-  getFriendRequestsApi,
   acceptFriendApi,
+  getFriendRequestsApi,
   rejectFriendApi,
 } from "../api/friendApi";
-import { getImageUrl } from "../../../utils/imageUrl";
+import { DEFAULT_AVATAR_URL, getImageUrl } from "../../../utils/imageUrl";
 
 function FriendRequests() {
   const [requests, setRequests] = useState([]);
@@ -12,29 +12,20 @@ function FriendRequests() {
   const loadRequests = async () => {
     try {
       const res = await getFriendRequestsApi();
-      setRequests(res.data);
+      setRequests(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);
     }
   };
 
   useEffect(() => {
-    const fetchRequests = async () => {
-      try {
-        const res = await getFriendRequestsApi();
-        setRequests(res.data);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-
-    fetchRequests();
+    loadRequests();
   }, []);
 
   const handleAccept = async (id) => {
     try {
       await acceptFriendApi(id);
-      loadRequests(); // 🔥 refresh
+      loadRequests();
     } catch (err) {
       console.error(err);
     }
@@ -43,7 +34,7 @@ function FriendRequests() {
   const handleReject = async (id) => {
     try {
       await rejectFriendApi(id);
-      loadRequests(); // 🔥 refresh
+      loadRequests();
     } catch (err) {
       console.error(err);
     }
@@ -56,39 +47,44 @@ function FriendRequests() {
       {requests.length === 0 ? (
         <p className="text-gray-400">Không có lời mời nào</p>
       ) : (
-        requests.map((r) => (
-          <div
-            key={r.friendshipId || r.id}
-            className="flex items-center justify-between bg-slate-800 p-3 rounded-xl mb-2"
-          >
-            {/* LEFT */}
-            <div className="flex items-center gap-3">
-              <img
-                src={getImageUrl(r.avatar)}
-                className="w-10 h-10 rounded-full"
-                alt="avatar"
-              />
-              <span className="text-white">{r.username}</span>
-            </div>
+        requests.map((request) => {
+          const requestId = request.friendshipId || request.id;
 
-            {/* RIGHT */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleAccept(r.friendshipId || r.id)}
-                className="bg-green-500 px-3 py-1 rounded text-white"
-              >
-                Accept
-              </button>
+          return (
+            <div
+              key={requestId}
+              className="flex items-center justify-between bg-slate-800 p-3 rounded-xl mb-2"
+            >
+              <div className="flex items-center gap-3">
+                <img
+                  src={getImageUrl(request.avatar) || DEFAULT_AVATAR_URL}
+                  className="w-10 h-10 rounded-full object-cover bg-slate-700"
+                  alt="avatar"
+                  onError={(event) => {
+                    event.currentTarget.src = DEFAULT_AVATAR_URL;
+                  }}
+                />
+                <span className="text-white">{request.username}</span>
+              </div>
 
-              <button
-                onClick={() => handleReject(r.friendshipId || r.id)}
-                className="bg-red-500 px-3 py-1 rounded text-white"
-              >
-                Reject
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleAccept(requestId)}
+                  className="bg-green-500 px-3 py-1 rounded text-white"
+                >
+                  Chấp nhận
+                </button>
+
+                <button
+                  onClick={() => handleReject(requestId)}
+                  className="bg-red-500 px-3 py-1 rounded text-white"
+                >
+                  Từ chối
+                </button>
+              </div>
             </div>
-          </div>
-        ))
+          );
+        })
       )}
     </div>
   );

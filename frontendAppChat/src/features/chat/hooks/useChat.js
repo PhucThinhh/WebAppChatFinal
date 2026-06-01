@@ -8,9 +8,46 @@ function useChat() {
   // ================= HELPER =================
   const getId = (m) => m._id || m.id;
 
+  const isSameOutgoingMessage = (a, b) => {
+    const aSender = Number(a?.senderId);
+    const bSender = Number(b?.senderId);
+    if (!Number.isFinite(aSender) || aSender !== bSender) return false;
+
+    const aContent = String(a?.content || "");
+    const bContent = String(b?.content || "");
+    if (aContent !== bContent) return false;
+
+    const aType = String(a?.type || "TEXT").toUpperCase();
+    const bType = String(b?.type || "TEXT").toUpperCase();
+    if (aType !== bType) return false;
+
+    const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : Date.now();
+    return Math.abs(bTime - aTime) < 10000;
+  };
+
   // ================= ADD MESSAGE =================
   const addMessage = (message) => {
-    setMessages((prev) => [...prev, message]);
+    setMessages((prev) => {
+      const messageId = getId(message);
+      if (messageId && prev.some((m) => String(getId(m)) === String(messageId))) {
+        return prev.map((m) =>
+          String(getId(m)) === String(messageId) ? { ...m, ...message, isOptimistic: false } : m
+        );
+      }
+
+      const optimisticIndex = prev.findIndex(
+        (m) => m.isOptimistic && isSameOutgoingMessage(m, message)
+      );
+
+      if (optimisticIndex >= 0) {
+        return prev.map((m, index) =>
+          index === optimisticIndex ? { ...m, ...message, isOptimistic: false } : m
+        );
+      }
+
+      return [...prev, message];
+    });
   };
 
   // ================= LOAD HISTORY =================

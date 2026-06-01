@@ -1,38 +1,37 @@
-  import { useEffect, useState, useMemo } from "react";
-  import { useNavigate } from "react-router-dom";
-  import { toast } from "react-toastify";
-  import { Phone, Video, ShieldCheck, Info, BellOff, Pin, UserPlus, Camera, Pencil } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
+import { Phone, Video, ShieldCheck, Info, BellOff, Pin, UserPlus, Camera, Pencil } from "lucide-react";
 
-  import Sidebar from "../components/Sidebar";
-  import ChatBox from "../components/ChatBox";
-  import ChatInput from "../components/ChatInput";
-  import CreateGroup from "../components/CreateGroup";
+import Sidebar from "../components/Sidebar";
+import ChatBox from "../components/ChatBox";
+import ChatInput from "../components/ChatInput";
+import CreateGroup from "../components/CreateGroup";
 import CallModal from "../components/CallModal";
 import { getBackendUrl } from "../../../config/env";
-import { getImageUrl } from "../../../utils/imageUrl";
+import { DEFAULT_AVATAR_URL, getImageUrl } from "../../../utils/imageUrl";
 import axiosClient from "../../../services/axiosClient";
 
-const VIOLATION_MESSAGE = "Tin nhắn của bạn bị vi phạm tiêu chuẩn cộng đồng.";
 
-  import FriendsList from "../../friend/components/FriendsList";
-  import FriendRequests from "../../friend/components/FriendRequests";
-  import FriendSearch from "../../friend/components/FriendSearch";
+import FriendsList from "../../friend/components/FriendsList";
+import FriendRequests from "../../friend/components/FriendRequests";
+import FriendSearch from "../../friend/components/FriendSearch";
 
-  import useChat from "../hooks/useChat";
-  import useUser from "../hooks/useUser";
+import useChat from "../hooks/useChat";
+import useUser from "../hooks/useUser";
 
-  import ProfileModal from "../../user/components/ProfileModal";
-  import ChangePasswordModal from "../../user/components/ChangePasswordModal";
+import ProfileModal from "../../user/components/ProfileModal";
+import ChangePasswordModal from "../../user/components/ChangePasswordModal";
 
-  import {
+import {
     disconnectSocket,
     joinRoom,
     leaveRoom,
     subscribeCallSignals,
     subscribeOnlineList,
-  } from "../socket/socket";
+} from "../socket/socket";
 
-  import {
+import {
     deleteConversationApi,
     blockUserApi,
     getBlockStatusApi,
@@ -46,22 +45,22 @@ const VIOLATION_MESSAGE = "Tin nhắn của bạn bị vi phạm tiêu chuẩn c
     leaveGroupApi,
     renameGroupApi,
     updateGroupAvatarApi,
-  } from "../api/chatApi";
-  import { getFriendRequestsApi, getFriendsApi } from "../../friend/api/friendApi";
+} from "../api/chatApi";
+import { getFriendRequestsApi, getFriendsApi } from "../../friend/api/friendApi";
 
-  import {
+import {
     connectSocket,
     sendMessageSocket,
   subscribeGroupUpdates,
     subscribeUserStatus,
-  } from "../socket/socket";
+} from "../socket/socket";
 
-  import { getMessagesApi } from "../api/chatApi";
+import { getMessagesApi } from "../api/chatApi";
 
-  const DEFAULT_AVATAR =
-    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="%231e293b"/><circle cx="32" cy="24" r="12" fill="%23e2e8f0"/><path d="M12 56c4-12 14-18 20-18s16 6 20 18" fill="%23e2e8f0"/></svg>';
+const DEFAULT_AVATAR = DEFAULT_AVATAR_URL;
+const VIOLATION_MESSAGE = "Tin nhắn của bạn bị vi phạm tiêu chuẩn cộng đồng.";
 
-  function ChatPage() {
+function ChatPage() {
     const navigate = useNavigate();
 
     const { messages, setMessages, input, setInput, addMessage, messagesEndRef } =
@@ -145,6 +144,29 @@ const VIOLATION_MESSAGE = "Tin nhắn của bạn bị vi phạm tiêu chuẩn c
       return getImageUrl(avatar) || DEFAULT_AVATAR;
     };
 
+    const showIncomingMessageNotification = (message, conversation) => {
+      const title = conversation?.name || message?.senderName || "Tin nhắn mới";
+      const body = summarizeLastMessage(message);
+      const toastId = `incoming-${message?.id || message?._id || message?.createdAt || `${conversation?.id}-${Date.now()}`}`;
+
+      toast.info(`${title}: ${body}`, {
+        toastId,
+        autoClose: 3500,
+      });
+
+      if (
+        typeof window !== "undefined" &&
+        "Notification" in window &&
+        window.Notification.permission === "granted" &&
+        document.hidden
+      ) {
+        new window.Notification(title, {
+          body,
+          icon: getImageUrl(conversation?.avatar) || DEFAULT_AVATAR,
+        });
+      }
+    };
+
     const getFriendId = (friend) =>
       Number(friend?.userId ?? friend?.friendId ?? friend?.id);
 
@@ -159,7 +181,7 @@ const VIOLATION_MESSAGE = "Tin nhắn của bạn bị vi phạm tiêu chuẩn c
       return {
         id,
         username: getFriendName(friend),
-        avatar: friend?.avatar || null,
+        avatar: friend?.avatar || friend?.friendAvatar || friend?.user?.avatar || null,
       };
     };
 
@@ -879,6 +901,9 @@ const VIOLATION_MESSAGE = "Tin nhắn của bạn bị vi phạm tiêu chuẩn c
             const incomingConversationId = incomingRoomId.startsWith("group_")
               ? incomingRoomId
               : `private_${incomingRoomId}`;
+            const matchingConversation = conversations.find(
+              (conversation) => conversation.roomId === incomingRoomId
+            );
 
             moveConversationToTop(incomingRoomId);
             setConversations((prev) =>
@@ -895,6 +920,14 @@ const VIOLATION_MESSAGE = "Tin nhắn của bạn bị vi phạm tiêu chuẩn c
 
             const isActiveConversation =
               selectedConversationId === incomingConversationId;
+            const isIncomingFromOther =
+              Number(message.senderId) !== Number(currentUserId);
+            const isMutedIncoming =
+              mutedConversationIds.has(incomingConversationId);
+
+            if (isIncomingFromOther && !isMutedIncoming) {
+              showIncomingMessageNotification(message, matchingConversation);
+            }
 
             if (isActiveConversation) {
               addMessage({
@@ -915,8 +948,7 @@ const VIOLATION_MESSAGE = "Tin nhắn của bạn bị vi phạm tiêu chuẩn c
               return;
             }
 
-            if (Number(message.senderId) === Number(currentUserId)) return;
-            if (mutedConversationIds.has(incomingConversationId)) return;
+            if (!isIncomingFromOther || isMutedIncoming) return;
 
             setConversations((prev) =>
               prev.map((conversation) =>
@@ -1042,22 +1074,34 @@ const VIOLATION_MESSAGE = "Tin nhắn của bạn bị vi phạm tiêu chuẩn c
       if (!content) return;
       if (!currentUserId || (!selectedUser && !selectedGroup)) return;
 
+      const createdAt = new Date().toISOString();
+      const clientId = `local-${currentUserId}-${Date.now()}`;
       const msg = {
         senderId: Number(currentUserId),
         receiverId: selectedUser?.id || null,
         roomId,
         content,
         type: "TEXT",
+        createdAt,
       };
 
-      sendMessageSocket(msg);
+      addMessage({
+        ...msg,
+        id: clientId,
+        clientId,
+        status: "SENDING",
+        isOptimistic: true,
+        reactions: {},
+        seenBy: [],
+      });
+
       setConversations((prev) =>
         prev.map((conversation) =>
           conversation.roomId === roomId
             ? {
                 ...conversation,
                 lastMessage: summarizeLastMessage(msg),
-                lastMessageAt: new Date().toISOString(),
+                lastMessageAt: createdAt,
               }
             : conversation
         )
@@ -1088,6 +1132,11 @@ const VIOLATION_MESSAGE = "Tin nhắn của bạn bị vi phạm tiêu chuẩn c
       }
 
       setInput("");
+
+      const sent = sendMessageSocket(msg);
+      if (!sent) {
+        toast.warning("Đang kết nối lại, tin nhắn sẽ được gửi khi kết nối ổn định");
+      }
     };
 
     const handleSendFile = (fileUrl) => {

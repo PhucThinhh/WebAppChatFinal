@@ -1,6 +1,7 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import { deleteMessageApi, reactMessageApi, recallMessageApi } from "../api/chatApi";
 import { getBackendUrl } from "../../../config/env";
+import { DEFAULT_AVATAR_URL, getImageUrl } from "../../../utils/imageUrl";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "😡"];
 
@@ -204,6 +205,10 @@ const ChatBox = memo(
         return "✓✓ Đã xem";
       }
 
+      if (String(msg?.status || "").toUpperCase() === "SENDING") {
+        return "Đang gửi...";
+      }
+
       return "✓ Đã gửi";
     };
 
@@ -232,11 +237,11 @@ const ChatBox = memo(
           {viewers.map((member) => (
             <img
               key={member.userId || member.id}
-              src={getFileUrl(member.avatar)}
+              src={getImageUrl(member.avatar) || DEFAULT_AVATAR_URL}
               title={member.username}
               alt={member.username || "seen"}
               onError={(e) => {
-                e.currentTarget.style.display = "none";
+                e.currentTarget.src = DEFAULT_AVATAR_URL;
               }}
             />
           ))}
@@ -249,6 +254,12 @@ const ChatBox = memo(
       const normalized = String(url).trim();
       const backendUrl = getBackendUrl();
       if (normalized.startsWith("/")) return `${backendUrl}${normalized}`;
+      if (normalized.includes("localhost:8080")) {
+        return normalized.replace(/^https?:\/\/localhost:8080/i, backendUrl);
+      }
+      if (normalized.includes("127.0.0.1:8080")) {
+        return normalized.replace(/^https?:\/\/127\.0\.0\.1:8080/i, backendUrl);
+      }
       if (normalized.includes("localhost:5173")) {
         return normalized.replace(/^https?:\/\/localhost:5173/i, backendUrl);
       }
@@ -276,7 +287,7 @@ const ChatBox = memo(
                 ↓
               </button>
               <button onClick={onCloseSearch} className="message-search-btn">
-                ✕
+                ×
               </button>
             </div>
             <div className="text-xs text-slate-500 mt-1">
@@ -327,7 +338,7 @@ const ChatBox = memo(
                           <img src={getFileUrl(msg.fileUrl)} alt="file" className="message-image" />
                         ) : msg.fileUrl?.endsWith(".pdf") ? (
                           <button onClick={() => setPreviewPdf(getFileUrl(msg.fileUrl))} className="file-card">
-                            📕 {msg.fileUrl.split("/").pop()}
+                            📄 {msg.fileUrl.split("/").pop()}
                           </button>
                         ) : (
                           <a href={getFileUrl(msg.fileUrl)} target="_blank" rel="noreferrer" className="file-card">
@@ -375,14 +386,32 @@ const ChatBox = memo(
                           </div>
                         )}
                         {!msg.isRecalled && !isBot && isMe && (
-                          <button onClick={(e) => { e.stopPropagation(); handleRecallMessage(messageId); setSelectedMessageId(null); }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRecallMessage(messageId);
+                              setSelectedMessageId(null);
+                            }}
+                          >
                             Thu hồi
                           </button>
                         )}
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteMessage(messageId); setSelectedMessageId(null); }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteMessage(messageId);
+                            setSelectedMessageId(null);
+                          }}
+                        >
                           Xóa
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); onForwardMessage(msg); setSelectedMessageId(null); }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onForwardMessage(msg);
+                            setSelectedMessageId(null);
+                          }}
+                        >
                           Chuyển tiếp
                         </button>
                       </div>
@@ -412,7 +441,7 @@ const ChatBox = memo(
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[999]">
             <div className="bg-white rounded-3xl w-[82%] h-[82%] relative shadow-2xl overflow-hidden">
               <button onClick={() => setPreviewPdf(null)} className="absolute top-3 right-3 text-white bg-red-500 px-3 py-1 rounded-full z-10">
-                ✕
+                ×
               </button>
               <iframe src={previewPdf} className="w-full h-full" title="PDF preview" />
             </div>

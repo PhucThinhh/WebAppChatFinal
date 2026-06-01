@@ -3,12 +3,10 @@ import Cropper from "react-easy-crop";
 import { FaCamera } from "react-icons/fa";
 import { getMeApi, uploadAvatarApi, uploadCoverApi } from "../api/userApi";
 import EditProfileModal from "./EditProfileModal";
-import { getImageUrl } from "../../../utils/imageUrl";
+import { DEFAULT_AVATAR_URL, getImageUrl } from "../../../utils/imageUrl";
 
 const DEFAULT_COVER_URL =
   "https://images.unsplash.com/photo-1596701062351-86f84cc896c1?q=80&w=1000";
-const DEFAULT_AVATAR_URL =
-  "https://images.unsplash.com/photo-1549488344-a1_f1c5c56d2?q=80&w=400";
 
 function ProfileModal({ onClose, refreshUser }) {
   const [user, setUser] = useState(null);

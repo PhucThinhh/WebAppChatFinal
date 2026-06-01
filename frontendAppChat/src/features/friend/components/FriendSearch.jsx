@@ -1,50 +1,51 @@
 import { useState } from "react";
 import { searchUserApi, sendFriendRequestApi } from "../api/friendApi";
-import { getImageUrl } from "../../../utils/imageUrl";
+import { DEFAULT_AVATAR_URL, getImageUrl } from "../../../utils/imageUrl";
 
 function FriendSearch() {
   const [keyword, setKeyword] = useState("");
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // 🔍 search
   const handleSearch = async () => {
     if (!keyword.trim()) return;
 
     try {
       setLoading(true);
       const res = await searchUserApi(keyword);
-      setUsers(res.data);
+      setUsers(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
-      console.error(err);
+      console.error("Search users error:", err);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // ➕ gửi lời mời
   const handleAddFriend = async (id) => {
     try {
       await sendFriendRequestApi(id);
-
-      // update UI
       setUsers((prev) =>
         prev.map((u) => (u.id === id ? { ...u, status: "PENDING" } : u))
       );
     } catch (err) {
-      console.error(err);
+      console.error("Send friend request error:", err);
     }
   };
 
   return (
     <div className="p-4">
-      <h2 className="text-white font-bold mb-3">🔍 Tìm kiếm bạn bè</h2>
+      <h2 className="text-slate-950 font-bold mb-3 text-3xl">
+        Tìm kiếm bạn bè
+      </h2>
 
-      {/* INPUT */}
       <div className="flex gap-2 mb-4">
         <input
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSearch();
+          }}
           placeholder="Nhập tên / SĐT / email"
           className="flex-1 p-2 rounded bg-slate-800 text-white"
         />
@@ -57,27 +58,28 @@ function FriendSearch() {
         </button>
       </div>
 
-      {/* RESULT */}
       {loading ? (
-        <p className="text-gray-400">Đang tìm...</p>
+        <p className="text-gray-500">Đang tìm...</p>
       ) : (
         users.map((u) => (
           <div
             key={u.id}
             className="flex items-center justify-between bg-slate-800 p-3 rounded-xl mb-2"
           >
-            {/* LEFT */}
             <div className="flex items-center gap-3">
               <img
-                src={getImageUrl(u.avatar)}
-                className="w-10 h-10 rounded-full object-cover"
+                src={getImageUrl(u.avatar) || DEFAULT_AVATAR_URL}
+                alt={u.username || "avatar"}
+                className="w-10 h-10 rounded-full object-cover bg-slate-700"
+                onError={(e) => {
+                  e.currentTarget.src = DEFAULT_AVATAR_URL;
+                }}
               />
               <div>
                 <p className="text-white">{u.username}</p>
               </div>
             </div>
 
-            {/* RIGHT */}
             {u.status === "NONE" && (
               <button
                 onClick={() => handleAddFriend(u.id)}

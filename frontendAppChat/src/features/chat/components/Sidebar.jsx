@@ -10,10 +10,9 @@ import {
   Bell,
 } from "lucide-react";
 import { createPortal } from "react-dom";
-import { getImageUrl } from "../../../utils/imageUrl";
+import { DEFAULT_AVATAR_URL, getImageUrl } from "../../../utils/imageUrl";
 
-const DEFAULT_AVATAR =
-  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="%231e293b"/><circle cx="32" cy="24" r="12" fill="%23e2e8f0"/><path d="M12 56c4-12 14-18 20-18s16 6 20 18" fill="%23e2e8f0"/></svg>';
+const DEFAULT_AVATAR = DEFAULT_AVATAR_URL;
 
 function Sidebar({
   user,
@@ -35,6 +34,18 @@ function Sidebar({
     { id: "group", icon: Users, label: "Nhóm", badge: null },
     { id: "search", icon: Search, label: "Tìm kiếm", badge: null },
   ];
+
+  const openNotifications = () => {
+    if (
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      window.Notification.permission === "default"
+    ) {
+      window.Notification.requestPermission().catch(() => {});
+    }
+
+    onSelectTab("notifications");
+  };
 
   const settingsMenu = showSettings ? (
     <div className="zalo-settings-menu">
@@ -114,7 +125,7 @@ function Sidebar({
             type="button"
             className={`zalo-nav-btn ${activeTab === "notifications" ? "active" : ""}`}
             title="Thông báo"
-            onClick={() => onSelectTab("notifications")}
+            onClick={openNotifications}
           >
             <Bell size={23} strokeWidth={2.2} />
             {notificationCount > 0 && (

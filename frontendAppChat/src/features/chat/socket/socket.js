@@ -217,13 +217,15 @@ export const sendMessageSocket = (message) => {
 
   if (!token || connectionState !== "CONNECTED" || !stompClient) {
     console.log("BLOCK SEND - socket not ready");
-    return;
+    return false;
   }
 
   stompClient.publish({
     destination: "/app/chat.send",
     body: JSON.stringify(message),
   });
+
+  return true;
 };
 
 export const sendCallSignal = (payload) => {

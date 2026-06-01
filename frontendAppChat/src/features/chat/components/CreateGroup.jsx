@@ -2,10 +2,9 @@ import { useEffect, useState } from "react";
 import { createGroupApi } from "../api/chatApi";
 import axiosClient from "../../../services/axiosClient";
 import { toast } from "react-toastify";
-import { getImageUrl } from "../../../utils/imageUrl";
+import { DEFAULT_AVATAR_URL, getImageUrl } from "../../../utils/imageUrl";
 
-const DEFAULT_AVATAR =
-  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="%231e293b"/><circle cx="32" cy="24" r="12" fill="%23e2e8f0"/><path d="M12 56c4-12 14-18 20-18s16 6 20 18" fill="%23e2e8f0"/></svg>';
+const DEFAULT_AVATAR = DEFAULT_AVATAR_URL;
 
 export default function CreateGroup({ onCreated }) {
   const [groupName, setGroupName] = useState("");
@@ -74,8 +73,11 @@ export default function CreateGroup({ onCreated }) {
     );
   };
 
-  const resolveAvatar = (avatar) => {
-    return getImageUrl(avatar) || DEFAULT_AVATAR;
+  const resolveAvatar = (friend) => {
+    return (
+      getImageUrl(friend?.avatar || friend?.friendAvatar || friend?.user?.avatar) ||
+      DEFAULT_AVATAR
+    );
   };
 
   const toggleSelectFriend = (friend) => {
@@ -241,7 +243,7 @@ export default function CreateGroup({ onCreated }) {
                   onChange={() => toggleSelectFriend(friend)}
                 />
                 <img
-                  src={resolveAvatar(friend?.avatar)}
+                  src={resolveAvatar(friend)}
                   alt={getFriendLabel(friend, meId)}
                   onError={(e) => {
                     e.currentTarget.src = DEFAULT_AVATAR;

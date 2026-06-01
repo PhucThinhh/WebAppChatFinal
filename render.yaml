@@ -2,6 +2,7 @@ services:
   - type: web
     name: kindchat-api
     runtime: docker
+    plan: free
     rootDir: ChatApp
     envVars:
       - key: PORT

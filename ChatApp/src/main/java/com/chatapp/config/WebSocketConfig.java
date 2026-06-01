@@ -54,9 +54,21 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     }
 
     private String[] parseAllowedOrigins() {
-        return Arrays.stream(allowedOrigins.split(","))
+        String[] origins = Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isBlank())
                 .toArray(String[]::new);
+
+        if (origins.length == 0) {
+            return new String[] {
+                    "http://localhost:5173",
+                    "http://binchat.me",
+                    "http://www.binchat.me",
+                    "https://web-app-chat-final.vercel.app",
+                    "https://*.vercel.app"
+            };
+        }
+
+        return origins;
     }
 }

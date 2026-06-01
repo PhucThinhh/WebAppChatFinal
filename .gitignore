@@ -1,1 +1,16 @@
-ChatApp/src/main/resources/application.properties
+# secrets
+frontendAppChat/.env
+
+# frontend
+frontendAppChat/node_modules/
+frontendAppChat/dist/
+
+# backend
+ChatApp/target/
+ChatApp/*.log
+ChatApp/uploads/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store

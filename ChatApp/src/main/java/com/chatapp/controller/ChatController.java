@@ -46,7 +46,16 @@ public class ChatController {
     // =========================
     // GET MESSAGES
     // =========================
-    @GetMapping("/messages/{roomId}") public List<Message> getMessages( @PathVariable String roomId, Principal principal) { Long userId = Long.parseLong(principal.getName()); return chatService.getMessages(roomId, userId); }
+    @GetMapping("/messages/{roomId}")
+    public List<Message> getMessages(
+            @PathVariable String roomId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size,
+            Principal principal) {
+
+        Long userId = Long.parseLong(principal.getName());
+        return chatService.getMessages(roomId, userId, page, size);
+    }
 
     // =========================
     // DELETE FOR ME

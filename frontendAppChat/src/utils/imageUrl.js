@@ -2,11 +2,11 @@ import { getBackendUrl } from "../config/env";
 
 export const DEFAULT_AVATAR_URL = "/default-avatar.svg";
 
-export function getImageUrl(path) {
-  if (!path) return "";
+export function getImageUrl(path, fallback = "") {
+  if (!path) return fallback;
 
   const rawPath = String(path).trim();
-  if (!rawPath) return "";
+  if (!rawPath) return fallback;
 
   const apiBaseUrl = getBackendUrl();
 
@@ -43,7 +43,7 @@ export function getImageUrl(path) {
     normalized === "null" ||
     normalized === "undefined"
   ) {
-    return DEFAULT_AVATAR_URL;
+    return fallback || DEFAULT_AVATAR_URL;
   }
 
   if (fixedPath.startsWith("/")) {

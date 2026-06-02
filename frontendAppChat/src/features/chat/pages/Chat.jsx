@@ -141,7 +141,7 @@ function ChatPage() {
     }, [currentUserId]);
 
     const resolveAvatar = (avatar) => {
-      return getImageUrl(avatar) || DEFAULT_AVATAR;
+      return getImageUrl(avatar, DEFAULT_AVATAR) || DEFAULT_AVATAR;
     };
 
     const showIncomingMessageNotification = (message, conversation) => {
@@ -162,10 +162,26 @@ function ChatPage() {
       ) {
         new window.Notification(title, {
           body,
-          icon: getImageUrl(conversation?.avatar) || DEFAULT_AVATAR,
+          icon: getImageUrl(conversation?.avatar, DEFAULT_AVATAR) || DEFAULT_AVATAR,
         });
       }
     };
+
+    useEffect(() => {
+      if (typeof window === "undefined" || !("Notification" in window)) return;
+
+      const requestNotificationPermission = () => {
+        if (window.Notification.permission === "default") {
+          window.Notification.requestPermission().catch(() => {});
+        }
+      };
+
+      window.addEventListener("click", requestNotificationPermission, { once: true });
+
+      return () => {
+        window.removeEventListener("click", requestNotificationPermission);
+      };
+    }, []);
 
     const getFriendId = (friend) =>
       Number(friend?.userId ?? friend?.friendId ?? friend?.id);
@@ -751,7 +767,7 @@ function ChatPage() {
 
       const loadHistory = async () => {
         try {
-          const res = await getMessagesApi(roomId);
+          const res = await getMessagesApi(roomId, 0, 30);
           console.log("API DATA:", res.data);
 
           const history = res.data.map((msg) => ({

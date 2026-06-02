@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 @Document(collection = "messages")
+@CompoundIndex(name = "room_created_idx", def = "{'roomId': 1, 'createdAt': -1}")
 @Data
 @Builder
 @NoArgsConstructor

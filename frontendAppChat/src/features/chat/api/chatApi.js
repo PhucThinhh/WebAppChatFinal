@@ -1,8 +1,10 @@
 import axiosClient from "../../../services/axiosClient";
 
 // lấy tin nhắn
-export const getMessagesApi = (roomId) => {
-  return axiosClient.get(`/chat/messages/${roomId}`);
+export const getMessagesApi = (roomId, page = 0, size = 30) => {
+  return axiosClient.get(`/chat/messages/${roomId}`, {
+    params: { page, size },
+  });
 };
 
 // xoá tin nhắn (1 chiều)

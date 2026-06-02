@@ -6,6 +6,8 @@ import com.chatapp.repository.ConversationStateRepository;
 import com.chatapp.repository.GroupMemberRepository;
 import com.chatapp.repository.MessageRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
@@ -13,6 +15,7 @@ import com.chatapp.entity.ConversationState;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -147,19 +150,30 @@ public class ChatService {
     // GET MESSAGES
     // =========================
     public List<Message> getMessages(String roomId, Long userId) {
+        return getMessages(roomId, userId, 0, 30);
+    }
+
+    public List<Message> getMessages(String roomId, Long userId, int page, int size) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        Pageable pageable = PageRequest.of(safePage, safeSize);
 
         ConversationState state = conversationRepository
                 .findByConversationKeyAndUserId(roomId, userId)
                 .orElse(null);
 
         List<Message> messages =
-                messageRepository.findByRoomIdOrderByCreatedAtAsc(roomId);
+                messageRepository.findByRoomIdOrderByCreatedAtDesc(roomId, pageable).getContent();
 
         if (state != null && Boolean.TRUE.equals(state.getIsDeleted())) {
             messages = messages.stream()
-                    .filter(m -> m.getCreatedAt().isAfter(state.getDeletedAt()))
+                    .filter(m -> m.getCreatedAt() != null
+                            && state.getDeletedAt() != null
+                            && m.getCreatedAt().isAfter(state.getDeletedAt()))
                     .toList();
         }
+
+        Collections.reverse(messages);
 
         List<Message> seenUpdates = messages.stream()
                 .filter(m -> m.getSenderId() != null)

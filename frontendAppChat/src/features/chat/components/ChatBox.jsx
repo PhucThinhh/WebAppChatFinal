@@ -648,14 +648,30 @@ const ChatBox = memo(
                             ) : msg.type === "CALL" ? (
                               (() => {
                                 const content = String(msg.content || "");
-
                                 const rawStatus = String(
                                   msg.callStatus || ""
                                 ).toUpperCase();
 
+                                const callType = String(
+                                  msg.callType ||
+                                    msg.mediaType ||
+                                    msg.callMediaType ||
+                                    ""
+                                ).toUpperCase();
+
+                                const isVideo =
+                                  callType === "VIDEO" ||
+                                  content.toLowerCase().includes("video");
+
+                                const durationText =
+                                  msg.callDuration ||
+                                  content.split("·")?.[1]?.trim() ||
+                                  "0 phút 0 giây";
+
                                 const isMissed =
                                   rawStatus === "MISSED" ||
                                   content.includes("Cuộc gọi nhỡ") ||
+                                  content.includes("Cuộc gọi video nhỡ") ||
                                   content.includes("Không trả lời");
 
                                 const isRejected =
@@ -666,29 +682,38 @@ const ChatBox = memo(
                                 const isEnded =
                                   rawStatus === "ENDED" ||
                                   content.includes("Cuộc gọi thoại đi") ||
-                                  content.includes("Cuộc gọi thoại đến");
-
-                                const durationText =
-                                  msg.callDuration ||
-                                  content.split("·")?.[1]?.trim() ||
-                                  "0 phút 0 giây";
+                                  content.includes("Cuộc gọi thoại đến") ||
+                                  content.includes("Cuộc gọi video đi") ||
+                                  content.includes("Cuộc gọi video đến");
 
                                 const title = isMissed
                                   ? isMe
-                                    ? "Cuộc gọi thoại đi"
+                                    ? isVideo
+                                      ? "Cuộc gọi video đi"
+                                      : "Cuộc gọi thoại đi"
+                                    : isVideo
+                                    ? "Cuộc gọi video nhỡ"
                                     : "Cuộc gọi nhỡ"
                                   : isRejected
-                                  ? "Cuộc gọi bị từ chối"
-                                  : content.includes("Cuộc gọi thoại đến")
-                                  ? "Cuộc gọi thoại đến"
-                                  : "Cuộc gọi thoại đi";
+                                  ? isVideo
+                                    ? "Cuộc gọi video bị từ chối"
+                                    : "Cuộc gọi bị từ chối"
+                                  : isMe
+                                  ? isVideo
+                                    ? "Cuộc gọi video đi"
+                                    : "Cuộc gọi thoại đi"
+                                  : isVideo
+                                  ? "Cuộc gọi video đến"
+                                  : "Cuộc gọi thoại đến";
 
                                 const subText = isEnded
                                   ? durationText
+                                  : isRejected
+                                  ? "Đã từ chối"
                                   : "Không trả lời";
 
                                 return (
-                                  <div className="w-[210px] rounded-xl bg-blue-950/70 border border-blue-800/60 px-3 py-3">
+                                  <div className="w-[220px] rounded-xl bg-blue-950/70 border border-blue-800/60 px-3 py-3">
                                     <div className="text-sm font-semibold text-slate-100">
                                       {title}
                                     </div>
@@ -699,6 +724,8 @@ const ChatBox = memo(
                                           ? "📞"
                                           : isRejected
                                           ? "📵"
+                                          : isVideo
+                                          ? "🎥"
                                           : "📱"}
                                       </span>
 

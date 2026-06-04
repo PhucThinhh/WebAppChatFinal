@@ -1070,13 +1070,17 @@ function ChatPage() {
       .join("_");
   }, [currentUserId, selectedUser, selectedGroup]);
 
-  const handleSendCallMessage = ({ status, durationText }) => {
+  const handleSendCallMessage = ({ status, durationText, mediaType }) => {
     if (!roomId || !currentUserId || !selectedUser?.id) return;
 
+    const isVideo = mediaType === "VIDEO";
+
     const statusText = {
-      ENDED: "Cuộc gọi thoại đi",
-      MISSED: "Cuộc gọi nhỡ",
-      REJECTED: "Cuộc gọi đã bị từ chối",
+      ENDED: isVideo ? "Cuộc gọi video đi" : "Cuộc gọi thoại đi",
+      MISSED: isVideo ? "Cuộc gọi video nhỡ" : "Cuộc gọi nhỡ",
+      REJECTED: isVideo
+        ? "Cuộc gọi video đã bị từ chối"
+        : "Cuộc gọi đã bị từ chối",
     }[status];
 
     const content =
@@ -1089,7 +1093,7 @@ function ChatPage() {
       content,
       type: "CALL",
       callStatus: status,
-      callType: "AUDIO",
+      callType: mediaType || "AUDIO",
       callDuration: durationText,
     };
 
@@ -1100,17 +1104,22 @@ function ChatPage() {
     incomingCall,
     callStatus,
     remoteAudioRef,
+    localVideoRef,
+    remoteVideoRef,
 
     isMicMuted,
+    isCameraOn,
     callTimeText,
+    callMediaType,
 
     startAudioCall,
+    startVideoCall,
     acceptCall,
     rejectCall,
     endCall,
 
     toggleMic,
-    toggleCameraPlaceholder,
+    toggleCamera,
 
     handleCallSignal,
   } = useAudioCall({
@@ -2783,14 +2792,25 @@ function ChatPage() {
                   </button>
 
                   {!selectedGroup && selectedUser && (
-                    <button
-                      type="button"
-                      onClick={startAudioCall}
-                      className="w-11 h-11 rounded-full flex items-center justify-center text-slate-300 hover:bg-white/10 hover:text-white transition"
-                      title="Gọi thoại"
-                    >
-                      📞
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={startAudioCall}
+                        className="w-11 h-11 rounded-full flex items-center justify-center text-slate-300 hover:bg-white/10 hover:text-white transition"
+                        title="Gọi thoại"
+                      >
+                        📞
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={startVideoCall}
+                        className="w-11 h-11 rounded-full flex items-center justify-center text-slate-300 hover:bg-white/10 hover:text-white transition"
+                        title="Gọi video"
+                      >
+                        🎥
+                      </button>
+                    </>
                   )}
                 </div>
               </header>
@@ -4510,15 +4530,18 @@ function ChatPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[1500]">
           <div className="w-[360px] bg-white text-slate-900 rounded-2xl shadow-2xl p-6 text-center">
             <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center mx-auto text-4xl mb-4">
-              📞
+              {incomingCall.payload?.mediaType === "VIDEO" ? "🎥" : "📞"}
             </div>
 
             <h3 className="text-xl font-bold">
               {incomingCall.callerName || "Ai đó"} đang gọi
             </h3>
 
-            <p className="text-sm text-slate-500 mt-1">Cuộc gọi thoại đến</p>
-
+            <p className="text-sm text-slate-500 mt-1">
+              {incomingCall.payload?.mediaType === "VIDEO"
+                ? "Cuộc gọi video đến"
+                : "Cuộc gọi thoại đến"}
+            </p>
             <div className="flex gap-3 mt-6">
               <button
                 type="button"
@@ -4541,9 +4564,10 @@ function ChatPage() {
       )}
 
       <audio ref={remoteAudioRef} autoPlay playsInline />
+
       {callStatus !== "IDLE" && callStatus !== "RINGING" && (
         <div className="fixed inset-0 z-[1500] bg-gradient-to-br from-violet-700 via-purple-700 to-fuchsia-700 flex items-center justify-center">
-          <div className="w-[520px] h-[780px] max-h-[92vh] bg-[#9ca3af] rounded-[24px] shadow-2xl overflow-hidden border border-white/20 flex flex-col">
+          <div className="w-[520px] h-[780px] max-h-[92vh] bg-[#111827] rounded-[24px] shadow-2xl overflow-hidden border border-white/20 flex flex-col">
             {/* TOP BAR */}
             <div className="h-[58px] bg-[#f4f4f5] flex items-center justify-between px-5 shrink-0">
               <div className="flex items-center gap-2">
@@ -4553,7 +4577,8 @@ function ChatPage() {
               </div>
 
               <div className="font-bold text-slate-700 text-[17px]">
-                Zalo Call - {user?.username || "Bạn"}
+                {callMediaType === "VIDEO" ? "Zalo Video Call" : "Zalo Call"} -{" "}
+                {user?.username || "Bạn"}
               </div>
 
               <button
@@ -4567,48 +4592,96 @@ function ChatPage() {
             </div>
 
             {/* BODY */}
-            <div className="relative flex-1 bg-[#9ca3af] flex items-center justify-center">
-              <div className="absolute top-0 left-0 bg-black px-6 py-4 text-emerald-400 font-mono text-[24px] font-bold tracking-wider">
+            <div className="relative flex-1 bg-[#0f172a] flex items-center justify-center overflow-hidden">
+              <div className="absolute top-0 left-0 z-20 bg-black/80 px-6 py-4 text-emerald-400 font-mono text-[24px] font-bold tracking-wider">
                 {callTimeText}
               </div>
 
-              <div className="flex flex-col items-center">
-                <div className="w-[190px] h-[190px] rounded-full bg-white/85 border-4 border-white/70 shadow-xl flex items-center justify-center overflow-hidden">
-                  <img
-                    src={resolveAvatar(selectedUser?.avatar)}
-                    alt=""
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = DEFAULT_AVATAR;
-                    }}
+              {callMediaType === "VIDEO" ? (
+                <>
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover bg-black"
                   />
-                </div>
 
-                <div className="mt-6 text-center">
-                  <div className="text-white text-2xl font-bold drop-shadow">
-                    {selectedUser?.username ||
-                      incomingCall?.callerName ||
-                      "Người dùng"}
+                  <div className="absolute right-4 bottom-4 z-30 w-[150px] h-[210px] rounded-2xl overflow-hidden bg-black border-2 border-white/40 shadow-xl">
+                    <video
+                      ref={localVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className={`w-full h-full object-cover ${
+                        isCameraOn ? "" : "hidden"
+                      }`}
+                    />
+
+                    {!isCameraOn && (
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 text-white">
+                        <div className="text-3xl mb-2">🎥</div>
+                        <div className="text-xs text-slate-300">Camera tắt</div>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="text-white/80 text-sm mt-1">
-                    {callStatus === "CALLING"
-                      ? "Đang gọi..."
-                      : "Đang trong cuộc gọi"}
+                  <div className="absolute left-0 right-0 bottom-28 z-20 text-center">
+                    <div className="text-white text-2xl font-bold drop-shadow">
+                      {selectedUser?.username ||
+                        incomingCall?.callerName ||
+                        "Người dùng"}
+                    </div>
+
+                    <div className="text-white/80 text-sm mt-1">
+                      {callStatus === "CALLING"
+                        ? "Đang gọi video..."
+                        : "Đang trong video call"}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center">
+                  <div className="w-[190px] h-[190px] rounded-full bg-white/85 border-4 border-white/70 shadow-xl flex items-center justify-center overflow-hidden">
+                    <img
+                      src={resolveAvatar(selectedUser?.avatar)}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = DEFAULT_AVATAR;
+                      }}
+                    />
+                  </div>
+
+                  <div className="mt-6 text-center">
+                    <div className="text-white text-2xl font-bold drop-shadow">
+                      {selectedUser?.username ||
+                        incomingCall?.callerName ||
+                        "Người dùng"}
+                    </div>
+
+                    <div className="text-white/80 text-sm mt-1">
+                      {callStatus === "CALLING"
+                        ? "Đang gọi..."
+                        : "Đang trong cuộc gọi"}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* CONTROL BAR */}
             <div className="h-[96px] bg-black flex items-center justify-center gap-7 shrink-0">
               <button
                 type="button"
-                onClick={toggleCameraPlaceholder}
-                className="h-14 px-6 rounded-full border border-white/15 bg-white/5 hover:bg-white/10 text-white flex items-center gap-4 transition"
-                title="Mở camera"
+                onClick={toggleCamera}
+                className={`h-14 px-6 rounded-full border flex items-center gap-4 transition ${
+                  isCameraOn
+                    ? "bg-white/5 border-white/15 text-white hover:bg-white/10"
+                    : "bg-red-500/20 border-red-400 text-red-300 hover:bg-red-500/30"
+                }`}
+                title={isCameraOn ? "Tắt camera" : "Mở camera"}
               >
-                <span className="text-2xl">🎥</span>
+                <span className="text-2xl">{isCameraOn ? "🎥" : "📷"}</span>
                 <span className="text-white/70 text-xl">⌃</span>
               </button>
 

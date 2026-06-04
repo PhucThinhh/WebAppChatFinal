@@ -18,3 +18,6 @@ export const updateUserApi = (data) => {
 export const changePasswordApi = (data) => {
   return axiosClient.post("/user/change-password", data);
 };
+export const getUserInfoApi = (userId) => {
+  return axiosClient.get(`/user/${userId}`);
+};

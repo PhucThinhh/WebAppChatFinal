@@ -3,7 +3,7 @@ import { useRef, useEffect, useState } from "react";
 import EmojiPicker from "emoji-picker-react";
 import { uploadFileApi } from "../api/chatApi";
 
-function ChatInput({ input, setInput, onSend, onSendFile }) {
+function ChatInput({ input, setInput, onSend, onSendFile, onOpenPoll, }) {
   const textareaRef = useRef(null);
   const fileRef = useRef(null);
 
@@ -123,15 +123,22 @@ function ChatInput({ input, setInput, onSend, onSendFile }) {
           <Sparkles size={22} />
         </button>
 
+        <button
+          type="button"
+          onClick={onOpenPoll}
+          className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center"
+          title="Tạo bình chọn"
+        >
+          📊
+        </button>
+
         {/* INPUT */}
         <textarea
           ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={
-            aiMode
-              ? "Câu hỏi cho AI (gửi sẽ thêm /ai)..."
-              : "Nhập tin nhắn..."
+            aiMode ? "Câu hỏi cho AI (gửi sẽ thêm /ai)..." : "Nhập tin nhắn..."
           }
           rows="1"
           className="flex-1 bg-slate-800 text-white px-5 py-3 rounded-3xl outline-none resize-none"

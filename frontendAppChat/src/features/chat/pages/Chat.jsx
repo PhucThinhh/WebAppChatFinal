@@ -1,210 +1,477 @@
-  import { useEffect, useState, useMemo } from "react";
-  import { useNavigate } from "react-router-dom";
-  import { toast } from "react-toastify";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 
-  import Sidebar from "../components/Sidebar";
-  import ChatBox from "../components/chatBox";
-  import ChatInput from "../components/ChatInput";
-  import CreateGroup from "../components/CreateGroup";
+import Sidebar from "../components/Sidebar";
+import ChatBox from "../components/chatBox";
+import ChatInput from "../components/ChatInput";
+import CreateGroup from "../components/CreateGroup";
 
-  import FriendsList from "../../friend/components/FriendsList";
-  import FriendRequests from "../../friend/components/FriendRequests";
-  import FriendSearch from "../../friend/components/FriendSearch";
+import FriendsList from "../../friend/components/FriendsList";
+import FriendRequests from "../../friend/components/FriendRequests";
+import FriendSearch from "../../friend/components/FriendSearch";
 
-  import useChat from "../hooks/useChat";
-  import useUser from "../hooks/useUser";
+import useChat from "../hooks/useChat";
+import useUser from "../hooks/useUser";
 
-  import ProfileModal from "../../user/components/ProfileModal";
-  import ChangePasswordModal from "../../user/components/ChangePasswordModal";
+import ProfileModal from "../../user/components/ProfileModal";
+import ChangePasswordModal from "../../user/components/ChangePasswordModal";
+import { getUserInfoApi } from "../../user/api/userApi";
+import CreatePollModal from "../components/CreatePollModal";
 
-  import {
-    disconnectSocket,
-    joinRoom,
-    leaveRoom,
-    subscribeOnlineList,
-  } from "../socket/socket";
+import useAudioCall from "../hooks/useAudioCall";
 
-  import {
-    deleteConversationApi,
-    blockUserApi,
-    getBlockStatusApi,
-    unblockUserApi,
-    getMyGroupsApi,
-    addMemberApi,
-    getGroupMembersApi,
-    removeMemberApi,
-    deleteGroupApi,
-    updateRoleApi,
-    leaveGroupApi,
-  } from "../api/chatApi";
-  import { getFriendsApi } from "../../friend/api/friendApi";
+import {
+  disconnectSocket,
+  joinRoom,
+  leaveRoom,
+  subscribeOnlineList,
+  subscribeConversationUpdates,
+} from "../socket/socket";
 
-  import {
-    connectSocket,
-    sendMessageSocket,
+import {
+  deleteConversationApi,
+  blockUserApi,
+  getBlockStatusApi,
+  unblockUserApi,
+  getMyGroupsApi,
+  addMemberApi,
+  getGroupMembersApi,
+  removeMemberApi,
+  deleteGroupApi,
+  updateRoleApi,
+  leaveGroupApi,
+  markAsReadApi,
+  getUnreadCountApi,
+  getPrivateConversationsApi,
+  uploadFileApi,
+  updateGroupAvatarApi,
+  updateGroupNameApi,
+  updateChatBackgroundApi,
+  getChatBackgroundApi,
+  reactMessageApi,
+  clearMessageReactionsApi,
+  updateNicknameApi,
+  getNicknameApi,
+  pinMessageApi,
+  unpinMessageApi,
+  getPinnedMessagesApi,
+} from "../api/chatApi";
+import { getFriendsApi } from "../../friend/api/friendApi";
+
+import {
+  connectSocket,
+  sendMessageSocket,
   subscribeGroupUpdates,
-    subscribeUserStatus,
-  } from "../socket/socket";
+  subscribeUserStatus,
+  subscribeCallSignal,
+} from "../socket/socket";
 
-  import { getMessagesApi } from "../api/chatApi";
+import { getMessagesApi } from "../api/chatApi";
 
-  const DEFAULT_AVATAR =
-    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="%231e293b"/><circle cx="32" cy="24" r="12" fill="%23e2e8f0"/><path d="M12 56c4-12 14-18 20-18s16 6 20 18" fill="%23e2e8f0"/></svg>';
+const DEFAULT_AVATAR =
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="%231e293b"/><circle cx="32" cy="24" r="12" fill="%23e2e8f0"/><path d="M12 56c4-12 14-18 20-18s16 6 20 18" fill="%23e2e8f0"/></svg>';
 
-  function ChatPage() {
-    const navigate = useNavigate();
+function ChatPage() {
+  const navigate = useNavigate();
 
-    const { messages, setMessages, input, setInput, addMessage, messagesEndRef } =
-      useChat();
+  const { messages, setMessages, input, setInput, addMessage, messagesEndRef } =
+    useChat();
 
-    const { user, fetchUser } = useUser();
+  const { user, fetchUser } = useUser();
 
-    const [activeTab, setActiveTab] = useState("chat");
-    const [selectedUser, setSelectedUser] = useState(null);
+  const [activeTab, setActiveTab] = useState("chat");
+  const [selectedUser, setSelectedUser] = useState(null);
 
-    const [showProfile, setShowProfile] = useState(false);
-    const [showChangePassword, setShowChangePassword] = useState(false);
-    const [showSettings, setShowSettings] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
-    const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const [showPollModal, setShowPollModal] = useState(false);
+  const [pollRealtimeMap, setPollRealtimeMap] = useState({});
 
-    const [showMenu, setShowMenu] = useState(false);
-    const [showMessageSearch, setShowMessageSearch] = useState(false);
-    const [showGroupMenu, setShowGroupMenu] = useState(false);
-    const [groupMemberCount, setGroupMemberCount] = useState(0);
-    const [showViewMembersModal, setShowViewMembersModal] = useState(false);
-    const [viewMembersList, setViewMembersList] = useState([]);
-    const [viewMembersLoading, setViewMembersLoading] = useState(false);
-    const [showAddMemberModal, setShowAddMemberModal] = useState(false);
-    const [showRemoveMemberModal, setShowRemoveMemberModal] = useState(false);
-    const [showUpdateRoleModal, setShowUpdateRoleModal] = useState(false);
-    const [friendCandidates, setFriendCandidates] = useState([]);
-    const [memberCandidates, setMemberCandidates] = useState([]);
-    const [roleCandidates, setRoleCandidates] = useState([]);
-    const [selectedMemberIds, setSelectedMemberIds] = useState([]);
-    const [selectedRoleUserId, setSelectedRoleUserId] = useState(null);
-    const [selectedRoleValue, setSelectedRoleValue] = useState("MEMBER");
+  const [, setShowMenu] = useState(false);
+  const [showPrivateInfoModal, setShowPrivateInfoModal] = useState(false);
+  const [privateInfo, setPrivateInfo] = useState(null);
+  const [privateInfoLoading, setPrivateInfoLoading] = useState(false);
+  const [showMessageSearch, setShowMessageSearch] = useState(false);
+  const [showGroupMenu, setShowGroupMenu] = useState(false);
+  const [groupMemberCount, setGroupMemberCount] = useState(0);
+  const [showViewMembersModal, setShowViewMembersModal] = useState(false);
+  const [viewMembersList, setViewMembersList] = useState([]);
+  const [viewMembersLoading, setViewMembersLoading] = useState(false);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [showRemoveMemberModal, setShowRemoveMemberModal] = useState(false);
+  const [showUpdateRoleModal, setShowUpdateRoleModal] = useState(false);
+  const [friendCandidates, setFriendCandidates] = useState([]);
+  const [memberCandidates, setMemberCandidates] = useState([]);
+  const [roleCandidates, setRoleCandidates] = useState([]);
+  const [selectedMemberIds, setSelectedMemberIds] = useState([]);
+  const [selectedRoleUserId, setSelectedRoleUserId] = useState(null);
+  const [selectedRoleValue, setSelectedRoleValue] = useState("MEMBER");
 
-    const [forwardMessage, setForwardMessage] = useState(null);
-    const [showForwardModal, setShowForwardModal] = useState(false);
+  const [showRenameGroupModal, setShowRenameGroupModal] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [renamingGroup, setRenamingGroup] = useState(false);
+  const [chatBackground, setChatBackground] = useState("");
+  const [backgroundShared, setBackgroundShared] = useState(false);
 
-    const [selectedGroup, setSelectedGroup] = useState(null);
-    const [isRemovedFromGroup, setIsRemovedFromGroup] = useState(false);
+  const [forwardMessage, setForwardMessage] = useState(null);
+  const [showForwardModal, setShowForwardModal] = useState(false);
 
-    const [blockStatus, setBlockStatus] = useState({
-      blockedByMe: false,
-      blockedByOther: false,
+  const [forwardSearch, setForwardSearch] = useState("");
+  const [forwardTargets, setForwardTargets] = useState([]);
+  const [selectedForwardTargets, setSelectedForwardTargets] = useState([]);
+
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [isRemovedFromGroup, setIsRemovedFromGroup] = useState(false);
+
+  const [joinedGroupRooms, setJoinedGroupRooms] = useState([]);
+  const groupConversationByRoomRef = useRef(new Map());
+
+  const [removedGroupRooms, setRemovedGroupRooms] = useState(new Set());
+  const removedGroupRoomsRef = useRef(new Set());
+
+  const [showPinnedList, setShowPinnedList] = useState(false);
+
+  const [blockStatus, setBlockStatus] = useState({
+    blockedByMe: false,
+    blockedByOther: false,
+  });
+
+  const [conversations, setConversations] = useState([]);
+  const [selectedConversationId, setSelectedConversationId] = useState(null);
+
+  const currentUserId = user?.id || user?._id;
+  const selectedGroupRef = useRef(null);
+  const currentUserIdRef = useRef(null);
+
+  const [friendNickname, setFriendNickname] = useState("");
+  const [nicknameInput, setNicknameInput] = useState("");
+  const [showNicknameModal, setShowNicknameModal] = useState(false);
+  const [savingNickname, setSavingNickname] = useState(false);
+
+  const [showLeaveConfirmModal, setShowLeaveConfirmModal] = useState(false);
+  const [leavingGroup, setLeavingGroup] = useState(false);
+
+  const [pinnedMessages, setPinnedMessages] = useState([]);
+
+  
+
+  const conversationStorageKey = useMemo(() => {
+    if (!currentUserId) return null;
+    return `chat_conversations_${currentUserId}`;
+  }, [currentUserId]);
+
+  const resolveAvatar = (avatar) => {
+    if (!avatar) return DEFAULT_AVATAR;
+    if (avatar.startsWith("data:image")) return avatar;
+    if (avatar.startsWith("http")) return avatar;
+    return `http://localhost:8080${avatar}`;
+  };
+
+  const buildLastMessageText = (msg) => {
+    if (!msg) return "";
+
+    if (msg.type === "SYSTEM") {
+      return msg.content || "Có cập nhật trong đoạn chat";
+    }
+
+    if (msg.type === "CALL") {
+      return msg.content || "Cuộc gọi";
+    }
+
+    const isMe = Number(msg.senderId) === Number(currentUserId);
+
+    if (msg.isRecalled) {
+      return isMe ? "Bạn đã thu hồi tin nhắn" : "Tin nhắn đã được thu hồi";
+    }
+
+    let text = "";
+
+    if (msg.type === "FILE") {
+      if (msg.fileUrl?.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+        text = "Đã gửi một ảnh";
+      } else if (msg.fileUrl?.endsWith(".pdf")) {
+        text = "Đã gửi một PDF";
+      } else {
+        text = "Đã gửi một tệp";
+      }
+    } else if (msg.type === "FORWARD") {
+      text = msg.originalContent
+        ? `Đã chuyển tiếp: ${msg.originalContent}`
+        : "Đã chuyển tiếp một tin nhắn";
+    } else {
+      text = msg.content || msg.text || "";
+    }
+
+    if (!text) return "";
+
+    if (isMe) {
+      return `Bạn: ${text}`;
+    }
+
+    // Nếu là group thì backend đã có senderName
+    if (String(msg.roomId || "").startsWith("group_") && msg.senderName) {
+      return `${msg.senderName}: ${text}`;
+    }
+
+    return text;
+  };
+
+  const getFriendId = (friend) =>
+    Number(friend?.userId ?? friend?.friendId ?? friend?.id);
+
+  const getFriendName = (friend) =>
+    friend?.username || friend?.name || `User ${getFriendId(friend)}`;
+
+  const getMemberRole = (member) =>
+    String(member?.role || "MEMBER").toUpperCase();
+
+  const memberRoleLabel = (role) => {
+    const r = String(role || "MEMBER").toUpperCase();
+    if (r === "OWNER") return "Chủ nhóm";
+    if (r === "ADMIN") return "Quản trị";
+    return "Thành viên";
+  };
+
+  /** Backend GET /chat/group/members → GroupMemberDTO: userId, username, avatar, role */
+  const enrichMemberFromDto = (m, friendById) => {
+    const memberId = Number(m?.userId ?? m?.user_id ?? m?.id);
+    if (!Number.isFinite(memberId) || memberId <= 0) return null;
+
+    const friendInfo = friendById?.get?.(memberId);
+
+    const nameFromDto = String(
+      m?.username ?? m?.userName ?? m?.name ?? ""
+    ).trim();
+
+    const avatarRaw = m?.avatar ?? m?.Avatar;
+
+    const avatarFromDto =
+      avatarRaw && String(avatarRaw).trim() !== ""
+        ? String(avatarRaw).trim()
+        : null;
+
+    const isMe = Number(memberId) === Number(currentUserId);
+
+    return {
+      id: memberId,
+      userId: memberId,
+
+      // 🔥 FIX QUAN TRỌNG
+      username: isMe
+        ? user?.username || "Bạn" // 👈 lấy từ useUser()
+        : friendInfo?.username ||
+          (nameFromDto && !/^User\s+\d+$/i.test(nameFromDto)
+            ? nameFromDto
+            : `User ${memberId}`),
+
+      avatar: isMe
+        ? user?.avatar || avatarFromDto
+        : friendInfo?.avatar ?? avatarFromDto ?? null,
+
+      role: getMemberRole(m),
+    };
+  };
+
+  const sortConversationsByLatest = (list) => {
+    return [...list].sort((a, b) => {
+      const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+
+      return timeB - timeA;
     });
+  };
 
-    const [conversations, setConversations] = useState([]);
-    const [selectedConversationId, setSelectedConversationId] = useState(null);
-
-    const currentUserId = user?.id || user?._id;
-
-    const conversationStorageKey = useMemo(() => {
-      if (!currentUserId) return null;
-      return `chat_conversations_${currentUserId}`;
-    }, [currentUserId]);
-
-    const resolveAvatar = (avatar) => {
-      if (!avatar) return DEFAULT_AVATAR;
-      if (avatar.startsWith("data:image")) return avatar;
-      if (avatar.startsWith("http")) return avatar;
-      return `http://localhost:8080${avatar}`;
-    };
-
-    const getFriendId = (friend) =>
-      Number(friend?.userId ?? friend?.friendId ?? friend?.id);
-
-    const getFriendName = (friend) =>
-      friend?.username || friend?.name || `User ${getFriendId(friend)}`;
-
-    const getMemberRole = (member) =>
-      String(member?.role || "MEMBER").toUpperCase();
-
-    const memberRoleLabel = (role) => {
-      const r = String(role || "MEMBER").toUpperCase();
-      if (r === "OWNER") return "Chủ nhóm";
-      if (r === "ADMIN") return "Quản trị";
-      return "Thành viên";
-    };
-
-    /** Backend GET /chat/group/members → GroupMemberDTO: userId, username, avatar, role */
-    const enrichMemberFromDto = (m, friendById) => {
-      const memberId = Number(m?.userId ?? m?.user_id ?? m?.id);
-      if (!Number.isFinite(memberId) || memberId <= 0) return null;
-
-      const friendInfo = friendById?.get?.(memberId);
-
-      const nameFromDto = String(
-        m?.username ?? m?.userName ?? m?.name ?? ""
-      ).trim();
-
-      const avatarRaw = m?.avatar ?? m?.Avatar;
-
-      const avatarFromDto =
-        avatarRaw && String(avatarRaw).trim() !== ""
-          ? String(avatarRaw).trim()
-          : null;
-
-      const isMe = Number(memberId) === Number(currentUserId);
-
-
-      return {
-        id: memberId,
-        userId: memberId,
-
-        // 🔥 FIX QUAN TRỌNG
-        username: isMe
-          ? user?.username || "Bạn" // 👈 lấy từ useUser()
-          : friendInfo?.username ||
-            (nameFromDto && !/^User\s+\d+$/i.test(nameFromDto)
-              ? nameFromDto
-              : `User ${memberId}`),
-
-        avatar: isMe
-          ? user?.avatar || avatarFromDto
-          : friendInfo?.avatar ?? avatarFromDto ?? null,
-
-        role: getMemberRole(m),
+  const upsertConversation = (conversation) => {
+    setConversations((prev) => {
+      const nextConversation = {
+        ...conversation,
+        lastMessageAt: conversation.lastMessageAt || new Date().toISOString(),
       };
-    };
 
-    const upsertConversation = (conversation) => {
-      setConversations((prev) => {
-        const existed = prev.find((item) => item.id === conversation.id);
+      const existed = prev.find((item) => item.id === nextConversation.id);
 
-        if (existed) {
-          return [
-            { ...existed, ...conversation },
-            ...prev.filter((item) => item.id !== conversation.id),
-          ];
+      const next = existed
+        ? [
+            { ...existed, ...nextConversation },
+            ...prev.filter((item) => item.id !== nextConversation.id),
+          ]
+        : [nextConversation, ...prev];
+
+      return sortConversationsByLatest(next);
+    });
+  };
+
+  const moveConversationToTop = (
+    targetRoomId,
+    latestAt = null,
+    latestMsg = null
+  ) => {
+    if (!targetRoomId) return;
+
+    setConversations((prev) => {
+      const index = prev.findIndex((item) => item.roomId === targetRoomId);
+      if (index < 0) return prev;
+
+      const matched = {
+        ...prev[index],
+        lastMessageAt: latestAt || new Date().toISOString(),
+        lastMessageText: latestMsg
+          ? buildLastMessageText(latestMsg)
+          : prev[index].lastMessageText,
+      };
+
+      const next = [matched, ...prev.filter((_, i) => i !== index)];
+
+      return sortConversationsByLatest(next);
+    });
+  };
+
+  const applyConversationMeta = async (conversationList) => {
+    if (!Array.isArray(conversationList) || conversationList.length === 0) {
+      return conversationList;
+    }
+
+    const updated = await Promise.all(
+      conversationList.map(async (conversation) => {
+        if (!conversation.roomId) return conversation;
+
+        let unreadCount = Number(conversation.unreadCount || 0);
+        let lastMessageAt = conversation.lastMessageAt || null;
+        let lastMessageText = conversation.lastMessageText || "";
+
+        try {
+          const unreadRes = await getUnreadCountApi(conversation.roomId);
+          unreadCount = Number(unreadRes.data || 0);
+        } catch (error) {
+          console.log("Get unread count lỗi:", error);
         }
 
-        return [conversation, ...prev];
+        try {
+          const msgRes = await getMessagesApi(conversation.roomId);
+          const messageList = Array.isArray(msgRes.data) ? msgRes.data : [];
+
+          if (messageList.length > 0) {
+            const lastMessage = messageList[messageList.length - 1];
+
+            lastMessageAt = lastMessage.createdAt || lastMessageAt;
+            lastMessageText = buildLastMessageText(lastMessage);
+          } else {
+            // Nếu là chat cá nhân mà không còn tin nhắn nào sau khi xoá hội thoại
+            // thì không cho hiện lại trên sidebar
+            if (conversation.type === "PRIVATE") {
+              return null;
+            }
+          }
+        } catch (error) {
+          console.log("Get last message lỗi:", error);
+        }
+
+        return {
+          ...conversation,
+          unreadCount,
+          lastMessageAt,
+          lastMessageText,
+        };
+      })
+    );
+
+    return sortConversationsByLatest(updated.filter(Boolean));
+  };
+
+  const handleForwardClick = async (msg) => {
+    setForwardMessage(msg);
+    setForwardSearch("");
+    setSelectedForwardTargets([]);
+
+    try {
+      const friendsRes = await getFriendsApi();
+      const friends = Array.isArray(friendsRes.data) ? friendsRes.data : [];
+
+      const friendTargets = friends
+        .map((friend) => {
+          const id = getFriendId(friend);
+
+          if (!id || Number(id) === Number(currentUserId)) {
+            return null;
+          }
+
+          return {
+            id,
+            type: "PRIVATE",
+            name: getFriendName(friend),
+            avatar: resolveAvatar(friend.avatar),
+            targetUser: {
+              id,
+              username: getFriendName(friend),
+              avatar: friend.avatar,
+            },
+          };
+        })
+        .filter(Boolean);
+
+      const groupTargets = conversations
+        .filter((conversation) => conversation.type === "GROUP")
+        .map((conversation) => ({
+          id:
+            conversation.targetGroup?.id ||
+            String(conversation.id || "").replace("group_", ""),
+          type: "GROUP",
+          name: conversation.name,
+          avatar: conversation.avatar,
+          roomId: conversation.roomId,
+          targetGroup: conversation.targetGroup,
+        }))
+        .filter((item) => item.id);
+
+      const map = new Map();
+
+      [...friendTargets, ...groupTargets].forEach((item) => {
+        const key = `${item.type}_${item.id}`;
+        map.set(key, item);
       });
-    };
 
-    const moveConversationToTop = (targetRoomId) => {
-      if (!targetRoomId) return;
-
-      setConversations((prev) => {
-        const index = prev.findIndex((item) => item.roomId === targetRoomId);
-        if (index <= 0) return prev;
-
-        const matched = prev[index];
-        return [matched, ...prev.filter((_, i) => i !== index)];
-      });
-    };
-
-    const handleForwardClick = (msg) => {
-      setForwardMessage(msg);
+      setForwardTargets(Array.from(map.values()));
       setShowForwardModal(true);
-    };
+    } catch (error) {
+      console.error("Load danh sách forward lỗi:", error);
+      toast.error("Không tải được danh sách chuyển tiếp");
+    }
+  };
 
-    const handleForwardToTarget = (target) => {
-      if (!forwardMessage) return;
-      const isGroupTarget = target?.type === "GROUP";
+  const toggleForwardTarget = (target) => {
+    const key = `${target.type}_${target.id}`;
+
+    setSelectedForwardTargets((prev) => {
+      const existed = prev.some((item) => `${item.type}_${item.id}` === key);
+
+      if (existed) {
+        return prev.filter((item) => `${item.type}_${item.id}` !== key);
+      }
+
+      if (prev.length >= 100) {
+        toast.warning("Chỉ có thể chọn tối đa 100 người/nhóm");
+        return prev;
+      }
+
+      return [...prev, target];
+    });
+  };
+
+  const handleForwardToSelected = () => {
+    if (!forwardMessage || selectedForwardTargets.length === 0) return;
+
+    const forwardContent =
+      forwardMessage.originalContent ||
+      forwardMessage.content ||
+      forwardMessage.text ||
+      "";
+
+    selectedForwardTargets.forEach((target) => {
+      const isGroupTarget = target.type === "GROUP";
 
       const newRoomId = isGroupTarget
         ? `group_${target.id}`
@@ -216,113 +483,325 @@
         senderId: Number(currentUserId),
         receiverId: isGroupTarget ? null : Number(target.id),
         roomId: newRoomId,
-        content: forwardMessage.content,
-        fileUrl: forwardMessage.fileUrl,
+
+        content: forwardContent,
+        fileUrl: forwardMessage.fileUrl || null,
+
         type: forwardMessage.type === "FILE" ? "FILE" : "FORWARD",
-        originalSenderId: forwardMessage.senderId,
-        originalContent: forwardMessage.content,
-        originalMessageId: forwardMessage.id,
+
+        originalSenderId:
+          forwardMessage.originalSenderId || forwardMessage.senderId,
+        originalContent: forwardContent,
+        originalMessageId:
+          forwardMessage.originalMessageId || forwardMessage.id,
       };
 
       sendMessageSocket(msg);
-      setShowForwardModal(false);
-      setForwardMessage(null);
-    };
 
-    const forwardableGroups = useMemo(() => {
-      return conversations.filter((conversation) => {
-        if (conversation.type !== "GROUP") return false;
-        if (!selectedGroup?.id) return true;
-        return String(conversation.targetGroup?.id) !== String(selectedGroup.id);
+      upsertConversation({
+        id: isGroupTarget ? `group_${target.id}` : `private_${newRoomId}`,
+        type: isGroupTarget ? "GROUP" : "PRIVATE",
+        name: target.name,
+        avatar: target.avatar,
+        roomId: newRoomId,
+        unreadCount: 0,
+        lastMessageAt: new Date().toISOString(),
+        lastMessageText: "Bạn: Đã chuyển tiếp một tin nhắn",
+        targetUser: isGroupTarget ? null : target.targetUser,
+        targetGroup: isGroupTarget ? target.targetGroup || target : null,
       });
-    }, [conversations, selectedGroup]);
+    });
 
-    const handleLeaveGroup = async () => {
-      if (!selectedGroup?.id || !currentUserId) return;
+    toast.success(`Đã chuyển tiếp đến ${selectedForwardTargets.length} nơi`);
 
-      if (!window.confirm("Bạn có chắc muốn rời nhóm?")) return;
+    setShowForwardModal(false);
+    setForwardMessage(null);
+    setForwardSearch("");
+    setForwardTargets([]);
+    setSelectedForwardTargets([]);
+  };
 
+  const handleOpenLeaveGroupConfirm = () => {
+    if (!selectedGroup?.id || !currentUserId) return;
+    setShowLeaveConfirmModal(true);
+  };
+
+  const handleConfirmLeaveGroup = async () => {
+    if (!selectedGroup?.id || !currentUserId) return;
+
+    try {
+      setLeavingGroup(true);
+
+      await leaveGroupApi(selectedGroup.id, Number(currentUserId));
+
+      setIsRemovedFromGroup(true);
+      setShowLeaveConfirmModal(false);
+      setShowGroupMenu(false);
+
+      toast.success("Đã rời nhóm 👋");
+    } catch (error) {
+      const message = error?.response?.data || "Rời nhóm thất bại";
+
+      if (message.includes("Chủ nhóm")) {
+        toast.error("Bạn phải chuyển quyền trước khi rời nhóm");
+        return;
+      }
+
+      toast.error(message);
+    } finally {
+      setLeavingGroup(false);
+    }
+  };
+
+  const handleChangeGroupAvatar = async (e) => {
+    const file = e.target.files?.[0];
+
+    if (!file || !selectedGroup?.id || !currentUserId) return;
+
+    try {
+      const uploadRes = await uploadFileApi(file);
+
+      const avatarUrl =
+        uploadRes.data?.url ||
+        uploadRes.data?.fileUrl ||
+        uploadRes.data?.path ||
+        uploadRes.data;
+
+      if (!avatarUrl) {
+        toast.error("Upload ảnh thất bại");
+        return;
+      }
+
+      const res = await updateGroupAvatarApi(
+        selectedGroup.id,
+        avatarUrl,
+        Number(currentUserId)
+      );
+
+      const newAvatar = res.data?.avatar || avatarUrl;
+
+      setSelectedGroup((prev) =>
+        prev
+          ? {
+              ...prev,
+              avatar: newAvatar,
+            }
+          : prev
+      );
+
+      setConversations((prev) =>
+        prev.map((item) =>
+          item.id === `group_${selectedGroup.id}`
+            ? {
+                ...item,
+                avatar: resolveAvatar(newAvatar),
+                targetGroup: {
+                  ...item.targetGroup,
+                  avatar: newAvatar,
+                },
+              }
+            : item
+        )
+      );
+
+      toast.success("Đã đổi ảnh nhóm");
+    } catch (error) {
+      console.error("Đổi ảnh nhóm lỗi:", error);
+      toast.error(error?.response?.data || "Đổi ảnh nhóm thất bại");
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  const handleOpenRenameGroupModal = () => {
+    if (!selectedGroup?.id) return;
+
+    setNewGroupName(selectedGroup.name || "");
+    setShowRenameGroupModal(true);
+  };
+
+  const handleUpdateGroupName = async () => {
+    if (!selectedGroup?.id || !currentUserId) return;
+
+    const name = newGroupName.trim();
+
+    if (!name) {
+      toast.error("Tên nhóm không được để trống");
+      return;
+    }
+
+    try {
+      setRenamingGroup(true);
+
+      const res = await updateGroupNameApi(
+        selectedGroup.id,
+        name,
+        Number(currentUserId)
+      );
+
+      const updatedName = res.data?.name || name;
+
+      setSelectedGroup((prev) =>
+        prev
+          ? {
+              ...prev,
+              name: updatedName,
+            }
+          : prev
+      );
+
+      setConversations((prev) =>
+        prev.map((item) =>
+          item.id === `group_${selectedGroup.id}`
+            ? {
+                ...item,
+                name: updatedName,
+                targetGroup: {
+                  ...item.targetGroup,
+                  name: updatedName,
+                },
+              }
+            : item
+        )
+      );
+
+      setShowRenameGroupModal(false);
+      toast.success("Đã đổi tên nhóm");
+    } catch (error) {
+      console.error("Đổi tên nhóm lỗi:", error);
+      toast.error(error?.response?.data || "Đổi tên nhóm thất bại");
+    } finally {
+      setRenamingGroup(false);
+    }
+  };
+
+  useEffect(() => {
+    selectedGroupRef.current = selectedGroup;
+  }, [selectedGroup]);
+
+  useEffect(() => {
+    currentUserIdRef.current = currentUserId;
+  }, [currentUserId]);
+
+  useEffect(() => {
+    removedGroupRoomsRef.current = removedGroupRooms;
+  }, [removedGroupRooms]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const fetchPrivateConversations = async () => {
       try {
-        await leaveGroupApi(selectedGroup.id, Number(currentUserId));
+        const res = await getPrivateConversationsApi();
 
-        // 🔥 xoá khỏi UI
-        setConversations((prev) =>
-          prev.filter((item) => item.id !== `group_${selectedGroup.id}`)
+        const privateConversationsRaw = Array.isArray(res.data)
+          ? res.data.map((item) => ({
+              id: item.id,
+              type: "PRIVATE",
+              name: item.name,
+              avatar: resolveAvatar(item.avatar),
+              roomId: item.roomId,
+              unreadCount: Number(item.unreadCount || 0),
+              lastMessageAt: item.lastMessageAt,
+              lastMessageText: item.lastMessageText || "",
+              targetUser: {
+                id: item.targetUser?.id,
+                username: item.targetUser?.username,
+                avatar: item.targetUser?.avatar,
+              },
+            }))
+          : [];
+
+        const privateConversations = await applyConversationMeta(
+          privateConversationsRaw
         );
 
-        setSelectedGroup(null);
-        setSelectedConversationId(null);
-        setMessages([]);
-        setShowGroupMenu(false);
+        setConversations((prev) => {
+          const groupConversations = prev.filter((c) => c.type === "GROUP");
 
-        toast.success("Đã rời nhóm 👋");
+          return sortConversationsByLatest([
+            ...groupConversations,
+            ...privateConversations,
+          ]);
+        });
       } catch (error) {
-        const message = error?.response?.data || "Rời nhóm thất bại";
-
-        if (message.includes("Chủ nhóm")) {
-          toast.error("Bạn phải chuyển quyền trước khi rời nhóm");
-          return;
-        }
-
-        toast.error(message);
+        console.error("Load private conversations lỗi:", error);
       }
     };
 
-    
+    fetchPrivateConversations();
+  }, [currentUserId]);
 
-    useEffect(() => {
-      if (!conversationStorageKey) return;
+  useEffect(() => {
+    if (!conversationStorageKey) return;
 
-      try {
-        const saved = localStorage.getItem(conversationStorageKey);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            setConversations(parsed);
-          }
+    try {
+      const saved = localStorage.getItem(conversationStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setConversations(parsed);
         }
-      } catch (error) {
-        console.log("Load conversations localStorage lỗi:", error);
       }
-    }, [conversationStorageKey]);
+    } catch (error) {
+      console.log("Load conversations localStorage lỗi:", error);
+    }
+  }, [conversationStorageKey]);
 
-    useEffect(() => {
-      if (!conversationStorageKey) return;
+  useEffect(() => {
+    if (!conversationStorageKey) return;
 
-      try {
-        localStorage.setItem(conversationStorageKey, JSON.stringify(conversations));
-      } catch (error) {
-        console.log("Save conversations localStorage lỗi:", error);
-      }
-    }, [conversations, conversationStorageKey]);
+    try {
+      localStorage.setItem(
+        conversationStorageKey,
+        JSON.stringify(conversations)
+      );
+    } catch (error) {
+      console.log("Save conversations localStorage lỗi:", error);
+    }
+  }, [conversations, conversationStorageKey]);
 
-    useEffect(() => {
-      if (!user?.id) return;
+  useEffect(() => {
+    if (!user?.id) return;
 
-      let statusSub = null;
-      let listSub = null;
+    let statusSub = null;
+    let listSub = null;
     let groupSub = null;
+    let conversationSub = null;
+
     const userId = Number(user.id);
 
     const syncMyGroups = async (focusGroupId = null) => {
       try {
         const res = await getMyGroupsApi(userId);
 
-        const groupConversations = res.data.map((group) => ({
+        const groupConversationsRaw = res.data.map((group) => ({
           id: `group_${group.id}`,
           type: "GROUP",
           name: group.name,
-          avatar: DEFAULT_AVATAR,
+          avatar: resolveAvatar(group.avatar),
           roomId: `group_${group.id}`,
           unreadCount: 0,
+          lastMessageAt: null,
           targetGroup: {
             id: group.id,
             name: group.name,
+            avatar: group.avatar,
           },
         }));
 
+        const groupConversations = await applyConversationMeta(
+          groupConversationsRaw
+        );
+        groupConversationByRoomRef.current = new Map(
+          groupConversations.map((group) => [group.roomId, group])
+        );
+
+        setJoinedGroupRooms(groupConversations.map((group) => group.roomId));
+
         setConversations((prev) => {
           const privateConversations = prev.filter((c) => c.type !== "GROUP");
+
           const prevUnread = new Map(
             prev
               .filter((c) => c.type === "GROUP")
@@ -331,54 +810,225 @@
 
           const mergedGroups = groupConversations.map((g) => ({
             ...g,
-            unreadCount: prevUnread.get(g.id) ?? 0,
+            unreadCount: g.unreadCount ?? prevUnread.get(g.id) ?? 0,
           }));
+
+          let merged = [...mergedGroups, ...privateConversations];
 
           if (focusGroupId) {
             const targetRoomId = `group_${focusGroupId}`;
-            const idx = mergedGroups.findIndex((g) => g.id === targetRoomId);
-            if (idx > 0) {
-              const [picked] = mergedGroups.splice(idx, 1);
-              mergedGroups.unshift(picked);
-            }
+
+            merged = merged.map((item) =>
+              item.roomId === targetRoomId
+                ? {
+                    ...item,
+                    lastMessageAt: new Date().toISOString(),
+                  }
+                : item
+            );
           }
 
-          return [...mergedGroups, ...privateConversations];
+          return sortConversationsByLatest(merged);
         });
       } catch (err) {
         console.error("Sync group realtime lỗi:", err);
       }
     };
 
-      connectSocket(user.id, () => {
-        listSub = subscribeOnlineList((list) => {
-          console.log("👥 LIST:", list);
-          const newSet = new Set(list.map((id) => Number(id)));
-          setOnlineUsers(newSet);
+    connectSocket(user.id, () => {
+      conversationSub = subscribeConversationUpdates(
+        userId,
+        async (message) => {
+          if (!message?.roomId) return;
+
+          const privateRoomId = message.roomId;
+
+          // Chỉ xử lý chat cá nhân
+          if (String(privateRoomId).startsWith("group_")) return;
+
+          const conversationId = `private_${privateRoomId}`;
+
+          const senderId = Number(message.senderId);
+          const receiverId = Number(message.receiverId);
+
+          const otherUserId =
+            senderId === Number(currentUserId) ? receiverId : senderId;
+
+          if (!otherUserId) return;
+
+          try {
+            const res = await getUserInfoApi(otherUserId);
+            const otherUser = res.data;
+
+            upsertConversation({
+              id: conversationId,
+              type: "PRIVATE",
+              name: otherUser.username,
+              avatar: resolveAvatar(otherUser.avatar),
+              roomId: privateRoomId,
+              unreadCount: selectedConversationId === conversationId ? 0 : 1,
+              lastMessageAt: message.createdAt || new Date().toISOString(),
+              lastMessageText: buildLastMessageText(message),
+              targetUser: {
+                id: otherUser.id,
+                username: otherUser.username,
+                avatar: otherUser.avatar,
+              },
+            });
+          } catch (error) {
+            console.log("Load conversation user info lỗi:", error);
+          }
+        }
+      );
+      listSub = subscribeOnlineList((list) => {
+        console.log("👥 LIST:", list);
+        const newSet = new Set(list.map((id) => Number(id)));
+        setOnlineUsers(newSet);
+      });
+
+      statusSub = subscribeUserStatus((data) => {
+        console.log("🔥 STATUS:", data);
+
+        setOnlineUsers((prev) => {
+          const newSet = new Set(prev);
+          const userId = Number(data.userId);
+
+          if (data.status === "ONLINE") {
+            newSet.add(userId);
+          } else {
+            newSet.delete(userId);
+          }
+
+          return newSet;
         });
-
-        statusSub = subscribeUserStatus((data) => {
-          console.log("🔥 STATUS:", data);
-
-          setOnlineUsers((prev) => {
-            const newSet = new Set(prev);
-            const userId = Number(data.userId);
-
-            if (data.status === "ONLINE") {
-              newSet.add(userId);
-            } else {
-              newSet.delete(userId);
-            }
-
-            return newSet;
-          });
-        });
+      });
 
       syncMyGroups();
       groupSub = subscribeGroupUpdates(userId, (event) => {
         const action = String(event?.action || "");
         const groupId = String(event?.groupId || "").trim();
         const roomId = groupId ? `group_${groupId}` : null;
+        if (
+          (action === "GROUP_MEMBER_REMOVED" ||
+            action === "GROUP_MEMBER_ADDED") &&
+          roomId
+        ) {
+          const activeGroup = selectedGroupRef.current;
+          const myId = Number(currentUserIdRef.current);
+
+          const isCurrentOpeningGroup =
+            activeGroup && String(activeGroup.id) === String(groupId);
+
+          getGroupMembersApi(groupId)
+            .then((res) => {
+              const memberIds = Array.isArray(res.data)
+                ? res.data.map((m) => Number(m?.userId)).filter(Boolean)
+                : [];
+
+              const stillInGroup = memberIds.includes(myId);
+
+              setGroupMemberCount(memberIds.length);
+
+              if (isCurrentOpeningGroup) {
+                setIsRemovedFromGroup(!stillInGroup);
+
+                if (!stillInGroup) {
+                  // đánh dấu room này đã bị kick
+                  setRemovedGroupRooms((prev) => {
+                    const next = new Set(prev);
+                    next.add(roomId);
+                    return next;
+                  });
+
+                  // rời socket room
+                  leaveRoom(roomId);
+
+                  setShowGroupMenu(false);
+                  setShowViewMembersModal(false);
+                  setShowAddMemberModal(false);
+                  setShowRemoveMemberModal(false);
+                  setShowUpdateRoleModal(false);
+                  setShowRenameGroupModal(false);
+
+                  toast.warning(
+                    "Bạn đã bị xoá khỏi nhóm và không thể trả lời cuộc trò chuyện này"
+                  );
+                }
+              } else if (action === "GROUP_MEMBER_ADDED") {
+                setRemovedGroupRooms((prev) => {
+                  const next = new Set(prev);
+                  next.delete(roomId);
+                  return next;
+                });
+
+                toast.success("Bạn đã được thêm lại vào nhóm");
+              }
+            })
+            .catch(() => {
+              if (isCurrentOpeningGroup) {
+                setIsRemovedFromGroup(true);
+
+                setShowGroupMenu(false);
+                setShowViewMembersModal(false);
+                setShowAddMemberModal(false);
+                setShowRemoveMemberModal(false);
+                setShowUpdateRoleModal(false);
+                setShowRenameGroupModal(false);
+              }
+            });
+        }
+
+        if (action === "GROUP_AVATAR_UPDATED" && event?.avatar && roomId) {
+          setConversations((prev) =>
+            prev.map((item) =>
+              item.roomId === roomId
+                ? {
+                    ...item,
+                    avatar: resolveAvatar(event.avatar),
+                    targetGroup: {
+                      ...item.targetGroup,
+                      avatar: event.avatar,
+                    },
+                  }
+                : item
+            )
+          );
+
+          setSelectedGroup((prev) =>
+            prev && String(prev.id) === String(groupId)
+              ? {
+                  ...prev,
+                  avatar: event.avatar,
+                }
+              : prev
+          );
+        }
+
+        if (action === "GROUP_NAME_UPDATED" && event?.groupName && roomId) {
+          setConversations((prev) =>
+            prev.map((item) =>
+              item.roomId === roomId
+                ? {
+                    ...item,
+                    name: event.groupName,
+                    targetGroup: {
+                      ...item.targetGroup,
+                      name: event.groupName,
+                    },
+                  }
+                : item
+            )
+          );
+
+          setSelectedGroup((prev) =>
+            prev && String(prev.id) === String(groupId)
+              ? {
+                  ...prev,
+                  name: event.groupName,
+                }
+              : prev
+          );
+        }
 
         syncMyGroups(groupId || null);
         if (roomId) {
@@ -390,1143 +1040,1891 @@
           GROUP_MEMBER_ADDED: "Bạn vừa được thêm vào nhóm",
           GROUP_MEMBER_REMOVED: "Bạn đã rời nhóm / bị xoá khỏi nhóm",
           GROUP_DELETED: "Nhóm đã được giải tán",
+          GROUP_AVATAR_UPDATED: "Ảnh nhóm đã được cập nhật",
+          GROUP_NAME_UPDATED: "Tên nhóm đã được cập nhật",
         }[action];
 
         if (actionMessage) {
           toast.info(actionMessage);
         }
       });
-      });
+    });
 
-      return () => {
-        statusSub?.unsubscribe();
-        listSub?.unsubscribe();
+    return () => {
+      statusSub?.unsubscribe();
+      listSub?.unsubscribe();
       groupSub?.unsubscribe();
-      };
-    }, [user?.id]);
+      conversationSub?.unsubscribe();
+    };
+  }, [user?.id]);
 
-    const roomId = useMemo(() => {
-      if (selectedGroup) {
-        return `group_${selectedGroup.id}`;
+  const roomId = useMemo(() => {
+    if (selectedGroup) {
+      return `group_${selectedGroup.id}`;
+    }
+
+    if (!currentUserId || (!selectedUser && !selectedGroup)) return null;
+
+    return [Number(currentUserId), Number(selectedUser.id)]
+      .sort((a, b) => a - b)
+      .join("_");
+  }, [currentUserId, selectedUser, selectedGroup]);
+
+  const handleSendCallMessage = ({ status, durationText }) => {
+    if (!roomId || !currentUserId || !selectedUser?.id) return;
+
+    const statusText = {
+      ENDED: "Cuộc gọi thoại đi",
+      MISSED: "Cuộc gọi nhỡ",
+      REJECTED: "Cuộc gọi đã bị từ chối",
+    }[status];
+
+    const content =
+      status === "ENDED" ? `${statusText} · ${durationText}` : statusText;
+
+    const msg = {
+      senderId: Number(currentUserId),
+      receiverId: Number(selectedUser.id),
+      roomId,
+      content,
+      type: "CALL",
+      callStatus: status,
+      callType: "AUDIO",
+      callDuration: durationText,
+    };
+
+    sendMessageSocket(msg);
+  };
+
+  const {
+    incomingCall,
+    callStatus,
+    remoteAudioRef,
+
+    isMicMuted,
+    callTimeText,
+
+    startAudioCall,
+    acceptCall,
+    rejectCall,
+    endCall,
+
+    toggleMic,
+    toggleCameraPlaceholder,
+
+    handleCallSignal,
+  } = useAudioCall({
+    roomId,
+    currentUserId,
+    selectedUser,
+    selectedGroup,
+    user,
+    onCallMessage: handleSendCallMessage,
+  });
+
+  useEffect(() => {
+    if (!roomId) {
+      setPinnedMessages([]);
+      return;
+    }
+
+    const loadPinnedMessages = async () => {
+      try {
+        const res = await getPinnedMessagesApi(roomId);
+
+        setPinnedMessages(Array.isArray(res.data) ? res.data : []);
+      } catch (error) {
+        console.log("Load pinned messages lỗi:", error);
+        setPinnedMessages([]);
       }
+    };
 
-      if (!currentUserId || (!selectedUser && !selectedGroup)) return null;
+    loadPinnedMessages();
+  }, [roomId]);
 
-      return [Number(currentUserId), Number(selectedUser.id)]
-        .sort((a, b) => a - b)
-        .join("_");
-    }, [currentUserId, selectedUser, selectedGroup]);
+  const loadPrivateNickname = async (targetRoomId, targetUserId) => {
+    if (!targetRoomId || !targetUserId) {
+      setFriendNickname("");
+      setNicknameInput("");
+      return;
+    }
 
-    const handleSelectConversation = async (conversation) => {
-      setSelectedConversationId(conversation.id);
+    try {
+      const res = await getNicknameApi(targetRoomId, targetUserId);
+
+      const nickname = res.data?.nickname || "";
+
+      setFriendNickname(nickname);
+      setNicknameInput(nickname);
+    } catch (error) {
+      console.log("Load biệt danh lỗi:", error);
+      setFriendNickname("");
+      setNicknameInput("");
+    }
+  };
+
+  
+
+  const handleUpdateNickname = async (overrideNickname = null) => {
+    if (!roomId || !selectedUser?.id) return;
+
+    try {
+      setSavingNickname(true);
+
+      const res = await updateNicknameApi(
+        roomId,
+        selectedUser.id,
+        overrideNickname !== null ? overrideNickname : nicknameInput
+      );
+
+      const newNickname = res.data?.nickname || "";
+
+      setFriendNickname(newNickname);
+      setNicknameInput(newNickname);
+
       setConversations((prev) =>
         prev.map((item) =>
-          item.id === conversation.id ? { ...item, unreadCount: 0 } : item
+          item.roomId === roomId
+            ? {
+                ...item,
+                name:
+                  newNickname ||
+                  item.targetUser?.username ||
+                  selectedUser.username,
+              }
+            : item
         )
       );
-      setActiveTab("chat");
-      setShowMenu(false);
-      setShowMessageSearch(false);
-      setShowGroupMenu(false);
 
-      if (conversation.type === "GROUP") {
-        setSelectedGroup(conversation.targetGroup);
-        setIsRemovedFromGroup(false);
-        setSelectedUser(null);
-        setBlockStatus({
-          blockedByMe: false,
-          blockedByOther: false,
-        });
-        return;
-      }
+      setShowNicknameModal(false);
+      toast.success(newNickname ? "Đã đổi biệt danh" : "Đã xoá biệt danh");
+    } catch (error) {
+      console.error("Đổi biệt danh lỗi:", error);
+      toast.error(error?.response?.data || "Đổi biệt danh thất bại");
+    } finally {
+      setSavingNickname(false);
+    }
+  };
 
-      setSelectedGroup(null);
-      setIsRemovedFromGroup(false);
-      setSelectedUser(conversation.targetUser);
+  const handlePinMessage = async (messageId) => {
+    if (!messageId) return;
 
-      try {
-        const res = await getBlockStatusApi(conversation.targetUser.id);
+    try {
+      const res = await pinMessageApi(messageId);
+      const pinned = res.data;
 
-        setBlockStatus({
-          blockedByMe: res.data?.blockedByMe ?? false,
-          blockedByOther: res.data?.blockedByOther ?? false,
-        });
-      } catch (err) {
-        console.log("Check block lỗi", err);
-      }
-    };
-
-    const handleSelectGroup = (group) => {
-      const conversation = {
-        id: `group_${group.id}`,
-        type: "GROUP",
-        name: group.name,
-        avatar: DEFAULT_AVATAR,
-        roomId: `group_${group.id}`,
-        unreadCount: 0,
-        targetGroup: {
-          id: group.id,
-          name: group.name,
-        },
-      };
-
-      upsertConversation(conversation);
-      setSelectedConversationId(conversation.id);
-      setSelectedGroup({
-        id: group.id,
-        name: group.name,
-      });
-      setIsRemovedFromGroup(false);
-      setSelectedUser(null);
-      setShowMenu(false);
-      setShowGroupMenu(false);
-      setActiveTab("chat");
-    };
-
-    
-
-    const handleDeleteConversation = async () => {
-      if (!roomId) return;
-
-      try {
-        await deleteConversationApi(roomId);
-
-        setMessages([]);
-        setSelectedUser(null);
-        setSelectedGroup(null);
-        setSelectedConversationId(null);
-        setConversations((prev) =>
-          prev.filter((item) => item.roomId !== roomId)
+      setPinnedMessages((prev) => {
+        const existed = prev.some(
+          (m) => String(m.id || m._id) === String(pinned.id || pinned._id)
         );
-        setShowMenu(false);
-      } catch (error) {
-        console.error("❌ Lỗi xoá hội thoại:", error);
-      }
-    };
 
-    useEffect(() => {
-      if (!currentUserId) return;
-
-      const fetchGroups = async () => {
-        try {
-          const res = await getMyGroupsApi(currentUserId);
-
-          const groupConversations = res.data.map((group) => ({
-            id: `group_${group.id}`,
-            type: "GROUP",
-            name: group.name,
-            avatar: DEFAULT_AVATAR,
-            roomId: `group_${group.id}`,
-            unreadCount: 0,
-            targetGroup: {
-              id: group.id,
-              name: group.name,
-            },
-          }));
-
-          setConversations((prev) => {
-            const existingIds = new Set(prev.map((c) => c.id));
-            const newOnes = groupConversations.filter(
-              (g) => !existingIds.has(g.id)
-            );
-            return [...newOnes, ...prev];
-          });
-        } catch (err) {
-          console.error("Load group lỗi:", err);
+        if (existed) {
+          return prev.map((m) =>
+            String(m.id || m._id) === String(pinned.id || pinned._id)
+              ? pinned
+              : m
+          );
         }
-      };
 
-      fetchGroups();
-    }, [currentUserId]);
+        return [pinned, ...prev];
+      });
 
-    useEffect(() => {
-      if (!roomId) return;
+      setMessages((prev) =>
+        prev.map((m) =>
+          String(m.id || m._id) === String(messageId)
+            ? {
+                ...m,
+                pinned: true,
+                pinnedBy: currentUserId,
+                pinnedAt: new Date().toISOString(),
+              }
+            : m
+        )
+      );
 
-      const loadHistory = async () => {
-        try {
-          const res = await getMessagesApi(roomId);
-          console.log("API DATA:", res.data);
+      toast.success("Đã ghim tin nhắn");
+    } catch (error) {
+      console.error("Ghim tin nhắn lỗi:", error);
+      toast.error(error?.response?.data || "Ghim tin nhắn thất bại");
+    }
+  };
 
-          const history = res.data.map((msg) => ({
+
+  const reloadCurrentRoom = async () => {
+    if (!roomId) return;
+
+    try {
+      const res = await getMessagesApi(roomId);
+
+      const history = Array.isArray(res.data)
+        ? res.data.map((msg) => ({
             id: msg.id || msg._id,
             senderId: msg.senderId,
             receiverId: msg.receiverId,
+            roomId: msg.roomId,
+
             content: msg.content,
             createdAt: msg.createdAt,
             deletedBy: msg.deletedBy,
             isRecalled: msg.isRecalled,
+
             fileUrl: msg.fileUrl,
             type: msg.type,
+
             originalSenderId: msg.originalSenderId,
             originalContent: msg.originalContent,
-          }));
+            originalMessageId: msg.originalMessageId,
 
-          setMessages(history);
-        } catch (err) {
-          console.error("Load history lỗi:", err);
-        }
-      };
+            senderName: msg.senderName,
+            senderAvatar: msg.senderAvatar,
+
+            reactions: Array.isArray(msg.reactions) ? msg.reactions : [],
+
+            pinned: msg.pinned,
+            pinnedBy: msg.pinnedBy,
+            pinnedAt: msg.pinnedAt,
+
+            pollId: msg.pollId,
+          }))
+        : [];
+
+      setMessages(history);
+
+      const pinnedRes = await getPinnedMessagesApi(roomId);
+      setPinnedMessages(Array.isArray(pinnedRes.data) ? pinnedRes.data : []);
+    } catch (error) {
+      console.log("Reload room sau khi tạo bình chọn lỗi:", error);
+    }
+  };
+  const handleUnpinMessage = async (messageId) => {
+    if (!messageId) return;
+
+    try {
+      await unpinMessageApi(messageId);
+
+      setPinnedMessages((prev) =>
+        prev.filter((m) => String(m.id || m._id) !== String(messageId))
+      );
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          String(m.id || m._id) === String(messageId)
+            ? {
+                ...m,
+                pinned: false,
+                pinnedBy: null,
+                pinnedAt: null,
+              }
+            : m
+        )
+      );
+
+      toast.success("Đã bỏ ghim tin nhắn");
+    } catch (error) {
+      console.error("Bỏ ghim lỗi:", error);
+      toast.error(error?.response?.data || "Bỏ ghim thất bại");
+    }
+  };
+
+  const handleSelectConversation = async (conversation) => {
+    setSelectedConversationId(conversation.id);
+
+    if (conversation.roomId) {
+      markAsReadApi(conversation.roomId).catch((error) =>
+        console.log("Mark as read lỗi:", error)
+      );
+    }
+
+    setConversations((prev) =>
+      prev.map((item) =>
+        item.id === conversation.id ? { ...item, unreadCount: 0 } : item
+      )
+    );
+    setActiveTab("chat");
+    setShowMenu(false);
+    setShowMessageSearch(false);
+    setShowGroupMenu(false);
+
+    if (conversation.type === "GROUP") {
+      setSelectedGroup(conversation.targetGroup);
+      setIsRemovedFromGroup(false);
+      setSelectedUser(null);
+      setFriendNickname("");
+      setNicknameInput("");
+      setShowNicknameModal(false);
+      setNicknameInput("");
+      setBlockStatus({
+        blockedByMe: false,
+        blockedByOther: false,
+      });
+      return;
+    }
+
+    setSelectedGroup(null);
+    setIsRemovedFromGroup(false);
+    setSelectedUser(conversation.targetUser);
+
+    loadPrivateNickname(conversation.roomId, conversation.targetUser?.id);
+
+    try {
+      const res = await getBlockStatusApi(conversation.targetUser.id);
+
+      setBlockStatus({
+        blockedByMe: res.data?.blockedByMe ?? false,
+        blockedByOther: res.data?.blockedByOther ?? false,
+      });
+    } catch (err) {
+      console.log("Check block lỗi", err);
+    }
+  };
+  useEffect(() => {
+    if (!roomId) {
+      setChatBackground("");
+      return;
+    }
+
+    const loadBackground = async () => {
+      try {
+        const res = await getChatBackgroundApi(roomId);
+
+        const bg = typeof res.data === "string" ? res.data : "";
+
+        setChatBackground(bg || "");
+      } catch (error) {
+        console.log("Load background lỗi:", error);
+        setChatBackground("");
+      }
+    };
+
+    loadBackground();
+  }, [roomId]);
+
+  const handleSelectGroup = (group) => {
+    const conversation = {
+      id: `group_${group.id}`,
+      type: "GROUP",
+      name: group.name,
+      avatar: resolveAvatar(group.avatar),
+      roomId: `group_${group.id}`,
+      unreadCount: 0,
+      targetGroup: {
+        id: group.id,
+        name: group.name,
+        avatar: group.avatar,
+      },
+    };
+
+    upsertConversation(conversation);
+    setSelectedConversationId(conversation.id);
+    setSelectedGroup({
+      id: group.id,
+      name: group.name,
+    });
+    setIsRemovedFromGroup(false);
+    setFriendNickname("");
+    setNicknameInput("");
+    setShowNicknameModal(false);
+    setSelectedUser(null);
+    setShowMenu(false);
+    setShowGroupMenu(false);
+    setActiveTab("chat");
+  };
+
+  const handleDeleteConversation = async () => {
+    if (!roomId) return;
+
+    try {
+      await deleteConversationApi(roomId);
 
       setMessages([]);
-      loadHistory();
-    }, [roomId, setMessages]);
-
-    useEffect(() => {
-      if (!selectedGroup?.id || !currentUserId) {
-        setIsRemovedFromGroup(false);
-        return;
-      }
-
-      const checkGroupMembership = async () => {
+      setSelectedUser(null);
+      setSelectedGroup(null);
+      setSelectedConversationId(null);
+      setConversations((prev) => prev.filter((item) => item.roomId !== roomId));
+      if (conversationStorageKey) {
         try {
-          const res = await getGroupMembersApi(selectedGroup.id);
-          const memberIds = Array.isArray(res.data)
-            ? res.data.map((m) => Number(m?.userId)).filter(Boolean)
-            : [];
-          const isMember = memberIds.includes(Number(currentUserId));
-          setIsRemovedFromGroup(!isMember);
+          const saved = localStorage.getItem(conversationStorageKey);
+          const parsed = saved ? JSON.parse(saved) : [];
+
+          if (Array.isArray(parsed)) {
+            const next = parsed.filter((item) => item.roomId !== roomId);
+            localStorage.setItem(conversationStorageKey, JSON.stringify(next));
+          }
         } catch (error) {
-          // API bị từ chối khi user không còn thuộc nhóm
-          setIsRemovedFromGroup(true);
+          console.log("Remove conversation localStorage lỗi:", error);
         }
-      };
-
-      checkGroupMembership();
-    }, [selectedGroup, currentUserId]);
-
-    useEffect(() => {
-      setShowViewMembersModal(false);
-      setViewMembersList([]);
-
-      if (!selectedGroup?.id) {
-        setGroupMemberCount(0);
-        return;
       }
+      setShowMenu(false);
+    } catch (error) {
+      console.error("❌ Lỗi xoá hội thoại:", error);
+    }
+  };
 
-      let cancelled = false;
+  useEffect(() => {
+    if (!currentUserId) return;
 
-      (async () => {
-        try {
-          const res = await getGroupMembersApi(selectedGroup.id);
-          const n = Array.isArray(res.data) ? res.data.length : 0;
-          if (!cancelled) setGroupMemberCount(n);
-        } catch {
-          if (!cancelled) setGroupMemberCount(0);
+    const fetchGroups = async () => {
+      try {
+        const res = await getMyGroupsApi(currentUserId);
+
+        const groupConversationsRaw = res.data.map((group) => ({
+          id: `group_${group.id}`,
+          type: "GROUP",
+          name: group.name,
+          avatar: resolveAvatar(group.avatar),
+          roomId: `group_${group.id}`,
+          unreadCount: 0,
+          lastMessageAt: null,
+          targetGroup: {
+            id: group.id,
+            name: group.name,
+            avatar: group.avatar,
+          },
+        }));
+
+        const groupConversations = await applyConversationMeta(
+          groupConversationsRaw
+        );
+        groupConversationByRoomRef.current = new Map(
+          groupConversations.map((group) => [group.roomId, group])
+        );
+
+        setJoinedGroupRooms(groupConversations.map((group) => group.roomId));
+
+        setConversations((prev) => {
+          const existingIds = new Set(prev.map((c) => c.id));
+
+          const newOnes = groupConversations.filter(
+            (g) => !existingIds.has(g.id)
+          );
+
+          return sortConversationsByLatest([...newOnes, ...prev]);
+        });
+      } catch (err) {
+        console.error("Load group lỗi:", err);
+      }
+    };
+
+    fetchGroups();
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (!roomId) return;
+
+    const loadHistory = async () => {
+      try {
+        const res = await getMessagesApi(roomId);
+        console.log("API DATA:", res.data);
+
+        const history = res.data.map((msg) => ({
+          id: msg.id || msg._id,
+          senderId: msg.senderId,
+          receiverId: msg.receiverId,
+          roomId: msg.roomId,
+
+          content: msg.content,
+          createdAt: msg.createdAt,
+          deletedBy: msg.deletedBy,
+          isRecalled: msg.isRecalled,
+
+          fileUrl: msg.fileUrl,
+          type: msg.type,
+
+          originalSenderId: msg.originalSenderId,
+          originalContent: msg.originalContent,
+          originalMessageId: msg.originalMessageId,
+
+          senderName: msg.senderName,
+          senderAvatar: msg.senderAvatar,
+
+          reactions: Array.isArray(msg.reactions) ? msg.reactions : [],
+
+          pinned: msg.pinned,
+          pinnedBy: msg.pinnedBy,
+          pinnedAt: msg.pinnedAt,
+
+          pollId: msg.pollId,
+        }));
+
+        setMessages(history);
+
+        const lastMessage = history[history.length - 1];
+
+        setConversations((prev) => {
+          const next = prev.map((item) =>
+            item.roomId === roomId
+              ? {
+                  ...item,
+                  unreadCount: 0,
+                  lastMessageAt: lastMessage?.createdAt || item.lastMessageAt,
+                  lastMessageText: lastMessage
+                    ? buildLastMessageText(lastMessage)
+                    : item.lastMessageText,
+                }
+              : item
+          );
+
+          return sortConversationsByLatest(next);
+        });
+
+        markAsReadApi(roomId).catch((error) =>
+          console.log("Mark read after load lỗi:", error)
+        );
+      } catch (err) {
+        console.error("Load history lỗi:", err);
+      }
+    };
+
+    setMessages([]);
+    loadHistory();
+  }, [roomId, setMessages]);
+
+  useEffect(() => {
+    if (!roomId) return;
+
+    const sub = subscribeCallSignal(roomId, handleCallSignal);
+
+    return () => {
+      sub?.unsubscribe();
+    };
+  }, [roomId, handleCallSignal]);
+
+  useEffect(() => {
+    if (!selectedGroup?.id || !currentUserId) {
+      setIsRemovedFromGroup(false);
+      return;
+    }
+
+    const checkGroupMembership = async () => {
+      const groupRoomId = `group_${selectedGroup.id}`;
+
+      try {
+        const res = await getGroupMembersApi(selectedGroup.id);
+
+        const memberIds = Array.isArray(res.data)
+          ? res.data.map((m) => Number(m?.userId)).filter(Boolean)
+          : [];
+
+        const isMember = memberIds.includes(Number(currentUserId));
+
+        setIsRemovedFromGroup(!isMember);
+
+        // Nếu không còn trong nhóm thì rời socket room
+        if (!isMember) {
+          setRemovedGroupRooms((prev) => {
+            const next = new Set(prev);
+            next.add(groupRoomId);
+            return next;
+          });
+
+          leaveRoom(groupRoomId);
+        } else {
+          setRemovedGroupRooms((prev) => {
+            const next = new Set(prev);
+            next.delete(groupRoomId);
+            return next;
+          });
         }
-      })();
+      } catch {
+        setIsRemovedFromGroup(true);
+        leaveRoom(groupRoomId);
+      }
+    };
 
-      return () => {
-        cancelled = true;
-      };
-    }, [selectedGroup?.id]);
+    checkGroupMembership();
+  }, [selectedGroup, currentUserId]);
 
-    useEffect(() => {
-      const handleLogoutSync = (event) => {
-        if (event.key === "logout") {
-          navigate("/", { replace: true });
-        }
-      };
+  useEffect(() => {
+    setShowViewMembersModal(false);
+    setViewMembersList([]);
 
-      window.addEventListener("storage", handleLogoutSync);
+    if (!selectedGroup?.id) {
+      setGroupMemberCount(0);
+      return;
+    }
 
-      return () => {
-        window.removeEventListener("storage", handleLogoutSync);
-      };
-    }, [navigate]);
+    let cancelled = false;
 
-    useEffect(() => {
-      const token = localStorage.getItem("token");
+    (async () => {
+      try {
+        const res = await getGroupMembersApi(selectedGroup.id);
+        const n = Array.isArray(res.data) ? res.data.length : 0;
+        if (!cancelled) setGroupMemberCount(n);
+      } catch {
+        if (!cancelled) setGroupMemberCount(0);
+      }
+    })();
 
-      if (!token) {
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedGroup?.id]);
+
+  useEffect(() => {
+    const handleLogoutSync = (event) => {
+      if (event.key === "logout") {
         navigate("/", { replace: true });
       }
-    }, [navigate]);
+    };
 
-    useEffect(() => {
-      if (!currentUserId || conversations.length === 0) return;
+    window.addEventListener("storage", handleLogoutSync);
 
-      const roomIds = [
-        ...new Set(
-          conversations
-            .map((conversation) => conversation.roomId)
-            .filter(Boolean)
-        ),
-      ];
+    return () => {
+      window.removeEventListener("storage", handleLogoutSync);
+    };
+  }, [navigate]);
 
-      roomIds.forEach((joinedRoomId) => {
-        joinRoom(
-          joinedRoomId,
-          (message) => {
-            if (!message) return;
+  useEffect(() => {
+    const token = localStorage.getItem("token");
 
-            const incomingRoomId = message.roomId || joinedRoomId;
-            const incomingConversationId = incomingRoomId.startsWith("group_")
-              ? incomingRoomId
-              : `private_${incomingRoomId}`;
+    if (!token) {
+      navigate("/", { replace: true });
+    }
+  }, [navigate]);
 
-            moveConversationToTop(incomingRoomId);
+  useEffect(() => {
+    if (!currentUserId || conversations.length === 0) return;
 
-            const isActiveConversation =
-              selectedConversationId === incomingConversationId;
+    const roomIds = [
+      ...new Set(
+        [
+          ...conversations.map((conversation) => conversation.roomId),
+          ...joinedGroupRooms,
+        ]
+          .filter(Boolean)
+          .filter((joinedRoomId) => !removedGroupRooms.has(joinedRoomId))
+      ),
+    ];
 
-            if (isActiveConversation) {
-              addMessage({
-                id: message.id,
-                senderId: message.senderId,
-                receiverId: message.receiverId,
-                content: message.content,
-                createdAt: message.createdAt,
-                isRecalled: message.isRecalled,
-                fileUrl: message.fileUrl,
-                type: message.type,
-                originalSenderId: message.originalSenderId,
-                originalContent: message.originalContent,
-              });
-              return;
-            }
+    roomIds.forEach((joinedRoomId) => {
+      joinRoom(
+        joinedRoomId,
 
-            if (Number(message.senderId) === Number(currentUserId)) return;
+        // ================= MESSAGE =================
+        (message) => {
+          if (!message) return;
 
-            setConversations((prev) =>
-              prev.map((conversation) =>
+          const incomingRoomId = message.roomId || joinedRoomId;
+
+          if (removedGroupRoomsRef.current.has(incomingRoomId)) {
+            return;
+          }
+          const incomingConversationId = incomingRoomId.startsWith("group_")
+            ? incomingRoomId
+            : `private_${incomingRoomId}`;
+
+          moveConversationToTop(incomingRoomId, message.createdAt, message);
+
+          const isActiveConversation =
+            selectedConversationId === incomingConversationId;
+
+          if (isActiveConversation) {
+            addMessage({
+              id: message.id,
+              senderId: message.senderId,
+              receiverId: message.receiverId,
+              roomId: message.roomId || incomingRoomId,
+
+              content: message.content,
+              createdAt: message.createdAt,
+              deletedBy: message.deletedBy,
+              isRecalled: message.isRecalled,
+
+              fileUrl: message.fileUrl,
+              type: message.type,
+
+              originalSenderId: message.originalSenderId,
+              originalContent: message.originalContent,
+              originalMessageId: message.originalMessageId,
+
+              senderName: message.senderName,
+              senderAvatar: message.senderAvatar,
+
+              reactions: Array.isArray(message.reactions)
+                ? message.reactions
+                : [],
+
+              pollId: message.pollId,
+
+              pinned: message.pinned,
+              pinnedBy: message.pinnedBy,
+              pinnedAt: message.pinnedAt,
+            });
+
+            setConversations((prev) => {
+              const existed = prev.some(
+                (conversation) => conversation.id === incomingConversationId
+              );
+
+              if (!existed && incomingRoomId.startsWith("group_")) {
+                const groupMeta =
+                  groupConversationByRoomRef.current.get(incomingRoomId);
+
+                if (!groupMeta) return prev;
+
+                const restoredConversation = {
+                  ...groupMeta,
+                  unreadCount: 0,
+                  lastMessageAt: message.createdAt || new Date().toISOString(),
+                  lastMessageText: buildLastMessageText(message),
+                };
+
+                return sortConversationsByLatest([
+                  restoredConversation,
+                  ...prev,
+                ]);
+              }
+
+              const next = prev.map((conversation) =>
                 conversation.id === incomingConversationId
                   ? {
                       ...conversation,
-                      unreadCount: (conversation.unreadCount || 0) + 1,
+                      lastMessageAt:
+                        message.createdAt || new Date().toISOString(),
+                      lastMessageText: buildLastMessageText(message),
                     }
                   : conversation
-              )
-            );
-          },
-          (deletedId) => {
-            const activeConversation = conversations.find(
-              (conversation) => conversation.id === selectedConversationId
+              );
+
+              return sortConversationsByLatest(next);
+            });
+
+            return;
+          }
+
+          if (Number(message.senderId) === Number(currentUserId)) return;
+
+          setConversations((prev) => {
+            const existed = prev.some(
+              (conversation) => conversation.id === incomingConversationId
             );
 
-            if (!activeConversation || activeConversation.roomId !== joinedRoomId) {
-              return;
+            if (!existed && incomingRoomId.startsWith("group_")) {
+              const groupMeta =
+                groupConversationByRoomRef.current.get(incomingRoomId);
+
+              if (!groupMeta) return prev;
+
+              const restoredConversation = {
+                ...groupMeta,
+                unreadCount: 1,
+                lastMessageAt: message.createdAt || new Date().toISOString(),
+                lastMessageText: buildLastMessageText(message),
+              };
+
+              return sortConversationsByLatest([restoredConversation, ...prev]);
             }
 
-            setMessages((prev) =>
-              prev.map((m) =>
-                String(m.id || m._id) === String(deletedId)
-                  ? { ...m, deletedBy: currentUserId }
-                  : m
-              )
-            );
-          },
-          (recallId) => {
-            const activeConversation = conversations.find(
-              (conversation) => conversation.id === selectedConversationId
+            const next = prev.map((conversation) =>
+              conversation.id === incomingConversationId
+                ? {
+                    ...conversation,
+                    unreadCount: (conversation.unreadCount || 0) + 1,
+                    lastMessageAt:
+                      message.createdAt || new Date().toISOString(),
+                    lastMessageText: buildLastMessageText(message),
+                  }
+                : conversation
             );
 
-            if (!activeConversation || activeConversation.roomId !== joinedRoomId) {
-              return;
-            }
+            return sortConversationsByLatest(next);
+          });
+        },
 
-            setMessages((prev) =>
-              prev.map((m) =>
-                String(m.id || m._id) === String(recallId)
-                  ? { ...m, isRecalled: true }
-                  : m
-              )
+        // ================= DELETE =================
+        (deletedId) => {
+          const activeConversation = conversations.find(
+            (conversation) => conversation.id === selectedConversationId
+          );
+
+          if (
+            !activeConversation ||
+            activeConversation.roomId !== joinedRoomId
+          ) {
+            return;
+          }
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              String(m.id || m._id) === String(deletedId)
+                ? { ...m, deletedBy: currentUserId }
+                : m
+            )
+          );
+        },
+
+        // ================= RECALL =================
+        (recallId) => {
+          const activeConversation = conversations.find(
+            (conversation) => conversation.id === selectedConversationId
+          );
+
+          if (
+            !activeConversation ||
+            activeConversation.roomId !== joinedRoomId
+          ) {
+            return;
+          }
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              String(m.id || m._id) === String(recallId)
+                ? { ...m, isRecalled: true }
+                : m
+            )
+          );
+        },
+
+        // ================= BACKGROUND REALTIME =================
+        (backgroundEvent) => {
+          if (!backgroundEvent?.background) return;
+
+          const activeConversation = conversations.find(
+            (conversation) => conversation.id === selectedConversationId
+          );
+
+          if (
+            !activeConversation ||
+            activeConversation.roomId !== joinedRoomId
+          ) {
+            return;
+          }
+
+          setChatBackground(backgroundEvent.background);
+
+          if (Number(backgroundEvent.updatedBy) !== Number(currentUserId)) {
+            toast.info(
+              `${backgroundEvent.updatedByName || "Ai đó"} đã đổi nền đoạn chat`
             );
           }
-        );
+        },
+
+        // ================= REACTION REALTIME =================
+        (reactionEvent) => {
+          if (!reactionEvent?.messageId) return;
+
+          setMessages((prev) =>
+            prev.map((msg) =>
+              String(msg.id || msg._id) === String(reactionEvent.messageId)
+                ? {
+                    ...msg,
+                    reactions: Array.isArray(reactionEvent.reactions)
+                      ? reactionEvent.reactions
+                      : [],
+                  }
+                : msg
+            )
+          );
+        },
+
+        (pinEvent) => {
+          if (!pinEvent?.id && !pinEvent?._id) return;
+
+          const pinId = pinEvent.id || pinEvent._id;
+          const isPinned = Boolean(pinEvent.pinned);
+
+          setMessages((prev) =>
+            prev.map((msg) =>
+              String(msg.id || msg._id) === String(pinId)
+                ? {
+                    ...msg,
+                    pinned: isPinned,
+                    pinnedBy: pinEvent.pinnedBy || null,
+                    pinnedAt: pinEvent.pinnedAt || null,
+                  }
+                : msg
+            )
+          );
+
+          setPinnedMessages((prev) => {
+            if (!isPinned) {
+              return prev.filter(
+                (m) => String(m.id || m._id) !== String(pinId)
+              );
+            }
+
+            const existed = prev.some(
+              (m) => String(m.id || m._id) === String(pinId)
+            );
+
+            if (existed) {
+              return prev.map((m) =>
+                String(m.id || m._id) === String(pinId) ? pinEvent : m
+              );
+            }
+
+            return [pinEvent, ...prev];
+          });
+        },
+        (pollEvent) => {
+          if (!pollEvent?.id) return;
+
+          setPollRealtimeMap((prev) => ({
+            ...prev,
+            [pollEvent.id]: pollEvent,
+          }));
+        }
+      );
+    });
+
+    return () => {
+      roomIds.forEach((joinedRoomId) => leaveRoom(joinedRoomId));
+    };
+  }, [
+    conversations,
+    currentUserId,
+    selectedConversationId,
+    addMessage,
+    setMessages,
+    joinedGroupRooms,
+    removedGroupRooms,
+  ]);
+
+  const handleSendMessage = () => {
+    if (selectedGroup && isRemovedFromGroup) {
+      console.warn("BLOCK SEND: removed from group", {
+        groupId: selectedGroup.id,
+        currentUserId,
       });
+      toast.error(
+        "Bạn đã bị xoá ra khỏi nhóm và không thể trả lời cuộc trò chuyện này"
+      );
+      return;
+    }
 
-      return () => {
-        roomIds.forEach((joinedRoomId) => leaveRoom(joinedRoomId));
-      };
-    }, [
-      conversations,
-      currentUserId,
-      selectedConversationId,
-      addMessage,
-      setMessages,
-    ]);
+    if (
+      !selectedGroup &&
+      (blockStatus.blockedByMe || blockStatus.blockedByOther)
+    ) {
+      toast.error("Không thể gửi tin nhắn");
+      return;
+    }
 
-    const handleSendMessage = () => {
-      if (selectedGroup && isRemovedFromGroup) {
-        console.warn("BLOCK SEND: removed from group", {
-          groupId: selectedGroup.id,
-          currentUserId,
-        });
-        toast.error("Bạn đã bị xoá ra khỏi nhóm và không thể trả lời cuộc trò chuyện này");
-        return;
-      }
+    const content = input?.trim();
 
-      if (!selectedGroup && (blockStatus.blockedByMe || blockStatus.blockedByOther)) {
-        toast.error("Không thể gửi tin nhắn");
-        return;
-      }
+    if (!content) return;
+    if (!currentUserId || (!selectedUser && !selectedGroup)) return;
 
-      if (!input?.trim()) return;
-      if (!currentUserId || (!selectedUser && !selectedGroup)) return;
+    const tempId = `temp_${Date.now()}`;
+    const createdAt = new Date().toISOString();
 
-      const msg = {
-        senderId: Number(currentUserId),
-        receiverId: selectedUser?.id || null,
-        roomId,
-        content: input,
-        type: "TEXT",
-      };
-
-      sendMessageSocket(msg);
-
-      if (selectedGroup) {
-        upsertConversation({
-          id: `group_${selectedGroup.id}`,
-          type: "GROUP",
-          name: selectedGroup.name,
-          avatar: DEFAULT_AVATAR,
-          roomId: `group_${selectedGroup.id}`,
-          targetGroup: selectedGroup,
-        });
-      } else if (selectedUser) {
-        const privateRoomId = [Number(currentUserId), Number(selectedUser.id)]
-          .sort((a, b) => a - b)
-          .join("_");
-
-        upsertConversation({
-          id: `private_${privateRoomId}`,
-          type: "PRIVATE",
-          name: selectedUser.username,
-          avatar: resolveAvatar(selectedUser.avatar),
-          roomId: privateRoomId,
-          targetUser: selectedUser,
-        });
-      }
-
-      setInput("");
+    const msg = {
+      tempId,
+      senderId: Number(currentUserId),
+      receiverId: selectedUser?.id || null,
+      roomId,
+      content,
+      type: "TEXT",
+      createdAt,
     };
 
-    const handleSendFile = (fileUrl) => {
-      if (selectedGroup && isRemovedFromGroup) {
-        console.warn("BLOCK SEND FILE: removed from group", {
-          groupId: selectedGroup.id,
-          currentUserId,
-        });
-        toast.error("Bạn đã bị xoá ra khỏi nhóm và không thể trả lời cuộc trò chuyện này");
-        return;
-      }
+    // ✅ Hiện ngay trong box chat của người gửi, không cần reload
+    addMessage({
+      id: tempId,
+      tempId,
+      senderId: Number(currentUserId),
+      receiverId: selectedUser?.id || null,
+      roomId,
+      content,
+      type: "TEXT",
+      createdAt,
+      deletedBy: null,
+      isRecalled: false,
+      reactions: [],
+      pinned: false,
+      pinnedBy: null,
+      pinnedAt: null,
+    });
 
-      if (!selectedGroup && (blockStatus.blockedByMe || blockStatus.blockedByOther)) {
-        toast.error("Bạn đã chặn người này");
-        return;
-      }
+    sendMessageSocket(msg);
 
-      if (!currentUserId || (!selectedUser && !selectedGroup)) return;
-
-      const msg = {
-        senderId: Number(currentUserId),
-        receiverId: selectedUser?.id || null,
-        roomId,
-        type: "FILE",
-        fileUrl,
-      };
-
-      sendMessageSocket(msg);
-    };
-
-    const handleSelectUser = async (u) => {
-      const userId = u.friendId || u.userId || u.id;
-
-      const targetUser = {
-        id: userId,
-        username: u.username,
-        avatar: u.avatar,
-      };
-
-      const privateRoomId = [Number(currentUserId), Number(userId)]
+    if (selectedGroup) {
+      upsertConversation({
+        id: `group_${selectedGroup.id}`,
+        type: "GROUP",
+        name: selectedGroup.name,
+        avatar: resolveAvatar(selectedGroup.avatar),
+        roomId: `group_${selectedGroup.id}`,
+        lastMessageAt: createdAt,
+        lastMessageText: `Bạn: ${content}`,
+        targetGroup: selectedGroup,
+      });
+    } else if (selectedUser) {
+      const privateRoomId = [Number(currentUserId), Number(selectedUser.id)]
         .sort((a, b) => a - b)
         .join("_");
 
-      const conversation = {
+      upsertConversation({
         id: `private_${privateRoomId}`,
         type: "PRIVATE",
-        name: u.username,
-        avatar: resolveAvatar(u.avatar),
+        name: selectedUser.username,
+        avatar: resolveAvatar(selectedUser.avatar),
         roomId: privateRoomId,
-        unreadCount: 0,
-        targetUser,
-      };
+        lastMessageAt: createdAt,
+        lastMessageText: `Bạn: ${content}`,
+        targetUser: selectedUser,
+      });
+    }
 
-      setSelectedUser(targetUser);
-      setSelectedGroup(null);
-      setSelectedConversationId(conversation.id);
-      setShowMenu(false);
-      setShowGroupMenu(false);
-      setActiveTab("chat");
-      upsertConversation(conversation);
+    setInput("");
+  };
 
-      try {
-        const res = await getBlockStatusApi(userId);
+  const handleSendFile = (fileUrl) => {
+    if (selectedGroup && isRemovedFromGroup) {
+      console.warn("BLOCK SEND FILE: removed from group", {
+        groupId: selectedGroup.id,
+        currentUserId,
+      });
+      toast.error(
+        "Bạn đã bị xoá ra khỏi nhóm và không thể trả lời cuộc trò chuyện này"
+      );
+      return;
+    }
 
-        setBlockStatus({
-          blockedByMe: res.data?.blockedByMe ?? false,
-          blockedByOther: res.data?.blockedByOther ?? false,
-        });
-      } catch (err) {
-        console.log("Check block lỗi", err);
-      }
+    if (
+      !selectedGroup &&
+      (blockStatus.blockedByMe || blockStatus.blockedByOther)
+    ) {
+      toast.error("Bạn đã chặn người này");
+      return;
+    }
+
+    if (!currentUserId || (!selectedUser && !selectedGroup)) return;
+
+    const msg = {
+      senderId: Number(currentUserId),
+      receiverId: selectedUser?.id || null,
+      roomId,
+      type: "FILE",
+      fileUrl,
     };
 
-    const handleLogout = () => {
-      localStorage.removeItem("token");
-      localStorage.removeItem("role");
+    sendMessageSocket(msg);
+  };
 
-      disconnectSocket();
+  const handleSelectUser = async (u) => {
+    const userId = u.friendId || u.userId || u.id;
 
-      localStorage.setItem("logout", Date.now());
-
-      navigate("/", { replace: true });
+    const targetUser = {
+      id: userId,
+      username: u.username,
+      avatar: u.avatar,
     };
 
-    const handleOpenViewMembersModal = async () => {
+    const privateRoomId = [Number(currentUserId), Number(userId)]
+      .sort((a, b) => a - b)
+      .join("_");
+
+    const conversation = {
+      id: `private_${privateRoomId}`,
+      type: "PRIVATE",
+      name: u.username,
+      avatar: resolveAvatar(u.avatar),
+      roomId: privateRoomId,
+      unreadCount: 0,
+      targetUser,
+    };
+
+    setSelectedUser(targetUser);
+    setSelectedGroup(null);
+    setSelectedConversationId(conversation.id);
+    setShowMenu(false);
+    setShowGroupMenu(false);
+    setActiveTab("chat");
+    upsertConversation(conversation);
+    loadPrivateNickname(privateRoomId, userId);
+
+    try {
+      const res = await getBlockStatusApi(userId);
+
+      setBlockStatus({
+        blockedByMe: res.data?.blockedByMe ?? false,
+        blockedByOther: res.data?.blockedByOther ?? false,
+      });
+    } catch (err) {
+      console.log("Check block lỗi", err);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+
+    disconnectSocket();
+
+    localStorage.setItem("logout", Date.now());
+
+    navigate("/", { replace: true });
+  };
+
+  const handleOpenViewMembersModal = async () => {
+    if (!selectedGroup?.id) return;
+
+    if (isRemovedFromGroup) {
+      toast.error("Bạn đã bị xoá khỏi nhóm nên không thể xem thành viên");
+      return;
+    }
+
+    setShowGroupMenu(false);
+    setShowViewMembersModal(true);
+    setViewMembersLoading(true);
+    setViewMembersList([]);
+
+    try {
+      const [friendsRes, membersRes] = await Promise.all([
+        getFriendsApi(),
+        getGroupMembersApi(selectedGroup.id),
+      ]);
+
+      const friends = Array.isArray(friendsRes.data) ? friendsRes.data : [];
+      const friendById = new Map(
+        friends.map((friend) => [getFriendId(friend), friend])
+      );
+
+      const members = Array.isArray(membersRes.data) ? membersRes.data : [];
+
+      const rows = members
+        .map((m) => enrichMemberFromDto(m, friendById))
+        .filter(Boolean);
+
+      setViewMembersList(rows);
+      setGroupMemberCount(rows.length);
+    } catch (error) {
+      console.error("View members lỗi:", error);
+      toast.error("Không tải được danh sách thành viên");
+    } finally {
+      setViewMembersLoading(false);
+    }
+  };
+
+  
+
+
+  
+
+  const handleOpenAddMemberModal = async () => {
+    try {
       if (!selectedGroup?.id) return;
 
-      setShowGroupMenu(false);
-      setShowViewMembersModal(true);
-      setViewMembersLoading(true);
-      setViewMembersList([]);
+      const [friendsRes, membersRes] = await Promise.all([
+        getFriendsApi(),
+        getGroupMembersApi(selectedGroup.id),
+      ]);
 
-      try {
-        const [friendsRes, membersRes] = await Promise.all([
-          getFriendsApi(),
-          getGroupMembersApi(selectedGroup.id),
-        ]);
-
-        const friends = Array.isArray(friendsRes.data) ? friendsRes.data : [];
-        const friendById = new Map(
-          friends.map((friend) => [getFriendId(friend), friend])
-        );
-
-        const members = Array.isArray(membersRes.data) ? membersRes.data : [];
-
-        const rows = members
-          .map((m) => enrichMemberFromDto(m, friendById))
-          .filter(Boolean);
-
-        setViewMembersList(rows);
-        setGroupMemberCount(rows.length);
-      } catch (error) {
-        console.error("View members lỗi:", error);
-        toast.error("Không tải được danh sách thành viên");
-      } finally {
-        setViewMembersLoading(false);
-      }
-    };
-
-    const handleOpenAddMemberModal = async () => {
-      try {
-        if (!selectedGroup?.id) return;
-
-        const [friendsRes, membersRes] = await Promise.all([
-          getFriendsApi(),
-          getGroupMembersApi(selectedGroup.id),
-        ]);
-
-        const list = Array.isArray(friendsRes.data) ? friendsRes.data : [];
-        const existingMemberIds = new Set(
-          Array.isArray(membersRes.data)
-            ? membersRes.data.map((m) => Number(m?.userId)).filter(Boolean)
-            : []
-        );
-
-        const filteredCandidates = list.filter(
-          (friend) => !existingMemberIds.has(getFriendId(friend))
-        );
-
-        setFriendCandidates(filteredCandidates);
-        setSelectedMemberIds([]);
-        setShowAddMemberModal(true);
-        setShowGroupMenu(false);
-      } catch (error) {
-        console.error("Load friends lỗi:", error);
-        toast.error("Không tải được danh sách bạn bè");
-      }
-    };
-
-    const handleOpenRemoveMemberModal = async () => {
-      try {
-        if (!selectedGroup?.id) return;
-
-        const [friendsRes, membersRes] = await Promise.all([
-          getFriendsApi(),
-          getGroupMembersApi(selectedGroup.id),
-        ]);
-
-        const friends = Array.isArray(friendsRes.data) ? friendsRes.data : [];
-        const members = Array.isArray(membersRes.data) ? membersRes.data : [];
-
-        const friendById = new Map(
-          friends.map((friend) => [getFriendId(friend), friend])
-        );
-
-        const mappedMembers = members
-          .map((m) => enrichMemberFromDto(m, friendById))
-          .filter(Boolean)
-          .filter((row) => row.id && row.id !== Number(currentUserId));
-
-        setMemberCandidates(mappedMembers);
-        setSelectedMemberIds([]);
-        setShowRemoveMemberModal(true);
-        setShowGroupMenu(false);
-      } catch (error) {
-        console.error("Load members lỗi:", error);
-        toast.error("Không tải được danh sách thành viên");
-      }
-    };
-
-    const handleOpenUpdateRoleModal = async () => {
-      try {
-        if (!selectedGroup?.id) return;
-
-        const [friendsRes, membersRes] = await Promise.all([
-          getFriendsApi(),
-          getGroupMembersApi(selectedGroup.id),
-        ]);
-
-        const friends = Array.isArray(friendsRes.data) ? friendsRes.data : [];
-        const members = Array.isArray(membersRes.data) ? membersRes.data : [];
-        const friendById = new Map(
-          friends.map((friend) => [getFriendId(friend), friend])
-        );
-
-        const mappedRoleCandidates = members
-          .map((m) => enrichMemberFromDto(m, friendById))
-          .filter(Boolean)
-          .filter(
-            (member) =>
-              member.id &&
-              member.id !== Number(currentUserId) &&
-              member.role !== "OWNER"
-          );
-
-        setRoleCandidates(mappedRoleCandidates);
-        setSelectedRoleUserId(mappedRoleCandidates[0]?.id ?? null);
-        setSelectedRoleValue(mappedRoleCandidates[0]?.role ?? "MEMBER");
-        setShowUpdateRoleModal(true);
-        setShowGroupMenu(false);
-      } catch (error) {
-        console.error("Load role members lỗi:", error);
-        toast.error("Không tải được danh sách thành viên");
-      }
-    };
-
-    const toggleSelectMember = (friend) => {
-      const id = getFriendId(friend);
-      if (!id) return;
-
-      setSelectedMemberIds((prev) =>
-        prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+      const list = Array.isArray(friendsRes.data) ? friendsRes.data : [];
+      const existingMemberIds = new Set(
+        Array.isArray(membersRes.data)
+          ? membersRes.data.map((m) => Number(m?.userId)).filter(Boolean)
+          : []
       );
-    };
 
-    const handleAddMembersToGroup = async () => {
-      if (!selectedGroup?.id || selectedMemberIds.length === 0) return;
+      const filteredCandidates = list.filter(
+        (friend) => !existingMemberIds.has(getFriendId(friend))
+      );
 
+      setFriendCandidates(filteredCandidates);
+      setSelectedMemberIds([]);
+      setShowAddMemberModal(true);
+      setShowGroupMenu(false);
+    } catch (error) {
+      console.error("Load friends lỗi:", error);
+      toast.error("Không tải được danh sách bạn bè");
+    }
+  };
+
+  const handleOpenRemoveMemberModal = async () => {
+    try {
+      if (!selectedGroup?.id) return;
+
+      const [friendsRes, membersRes] = await Promise.all([
+        getFriendsApi(),
+        getGroupMembersApi(selectedGroup.id),
+      ]);
+
+      const friends = Array.isArray(friendsRes.data) ? friendsRes.data : [];
+      const members = Array.isArray(membersRes.data) ? membersRes.data : [];
+
+      const friendById = new Map(
+        friends.map((friend) => [getFriendId(friend), friend])
+      );
+
+      const mappedMembers = members
+        .map((m) => enrichMemberFromDto(m, friendById))
+        .filter(Boolean)
+        .filter((row) => row.id && row.id !== Number(currentUserId))
+        .filter((row) => row.role !== "OWNER");
+
+      setMemberCandidates(mappedMembers);
+      setSelectedMemberIds([]);
+      setShowRemoveMemberModal(true);
+      setShowGroupMenu(false);
+    } catch (error) {
+      console.error("Load members lỗi:", error);
+      toast.error("Không tải được danh sách thành viên");
+    }
+  };
+
+  const handleOpenUpdateRoleModal = async () => {
+    try {
+      if (!selectedGroup?.id) return;
+
+      const [friendsRes, membersRes] = await Promise.all([
+        getFriendsApi(),
+        getGroupMembersApi(selectedGroup.id),
+      ]);
+
+      const friends = Array.isArray(friendsRes.data) ? friendsRes.data : [];
+      const members = Array.isArray(membersRes.data) ? membersRes.data : [];
+      const friendById = new Map(
+        friends.map((friend) => [getFriendId(friend), friend])
+      );
+
+      const mappedRoleCandidates = members
+        .map((m) => enrichMemberFromDto(m, friendById))
+        .filter(Boolean)
+        .filter(
+          (member) =>
+            member.id &&
+            member.id !== Number(currentUserId) &&
+            member.role !== "OWNER"
+        );
+
+      setRoleCandidates(mappedRoleCandidates);
+      setSelectedRoleUserId(mappedRoleCandidates[0]?.id ?? null);
+      setSelectedRoleValue(mappedRoleCandidates[0]?.role ?? "MEMBER");
+      setShowUpdateRoleModal(true);
+      setShowGroupMenu(false);
+    } catch (error) {
+      console.error("Load role members lỗi:", error);
+      toast.error("Không tải được danh sách thành viên");
+    }
+  };
+
+  const toggleSelectMember = (friend) => {
+    const id = getFriendId(friend);
+    if (!id) return;
+
+    setSelectedMemberIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleAddMembersToGroup = async () => {
+    if (!selectedGroup?.id || selectedMemberIds.length === 0) return;
+
+    try {
+      await Promise.all(
+        selectedMemberIds.map((userId) =>
+          addMemberApi(selectedGroup.id, userId)
+        )
+      );
+      toast.success("Thêm thành viên vào nhóm thành công! 🎉");
+      setShowAddMemberModal(false);
+      setSelectedMemberIds([]);
       try {
-        await Promise.all(
-          selectedMemberIds.map((userId) => addMemberApi(selectedGroup.id, userId))
+        const countRes = await getGroupMembersApi(selectedGroup.id);
+        setGroupMemberCount(
+          Array.isArray(countRes.data) ? countRes.data.length : 0
         );
-        toast.success("Thêm thành viên vào nhóm thành công! 🎉");
-        setShowAddMemberModal(false);
-        setSelectedMemberIds([]);
-        try {
-          const countRes = await getGroupMembersApi(selectedGroup.id);
-          setGroupMemberCount(
-            Array.isArray(countRes.data) ? countRes.data.length : 0
-          );
-        } catch {
-          /* ignore */
-        }
-      } catch (error) {
-        console.error("Add member lỗi:", error);
-        const message = error?.response?.data || "Thêm thành viên thất bại";
-
-        if (typeof message === "string" && message.includes("Không thuộc nhóm")) {
-          toast.error("Không thuộc nhóm");
-          return;
-        }
-
-        if (typeof message === "string" && message.includes("Không có quyền")) {
-          toast.error("Không có quyền");
-          return;
-        }
-
-        if (typeof message === "string" && message.includes("User đã trong nhóm")) {
-          toast.error("User đã trong nhóm");
-          return;
-        }
-
-        toast.error("Thêm thành viên thất bại");
+      } catch {
+        /* ignore */
       }
-    };
+    } catch (error) {
+      console.error("Add member lỗi:", error);
+      const message = error?.response?.data || "Thêm thành viên thất bại";
 
-    const handleRemoveMembersFromGroup = async () => {
-      if (!selectedGroup?.id || selectedMemberIds.length === 0) return;
+      if (typeof message === "string" && message.includes("Không thuộc nhóm")) {
+        toast.error("Không thuộc nhóm");
+        return;
+      }
 
+      if (typeof message === "string" && message.includes("Không có quyền")) {
+        toast.error("Không có quyền");
+        return;
+      }
+
+      if (
+        typeof message === "string" &&
+        message.includes("User đã trong nhóm")
+      ) {
+        toast.error("User đã trong nhóm");
+        return;
+      }
+
+      toast.error("Thêm thành viên thất bại");
+    }
+  };
+
+  const handleRemoveMembersFromGroup = async () => {
+    if (!selectedGroup?.id || selectedMemberIds.length === 0) return;
+
+    try {
+      await Promise.all(
+        selectedMemberIds.map((userId) =>
+          removeMemberApi(selectedGroup.id, userId, Number(currentUserId))
+        )
+      );
+      toast.success("Xoá thành viên khỏi nhóm thành công! 🎉");
+      setMemberCandidates((prev) =>
+        prev.filter((item) => !selectedMemberIds.includes(getFriendId(item)))
+      );
+      setSelectedMemberIds([]);
+      setShowRemoveMemberModal(false);
       try {
-        await Promise.all(
-          selectedMemberIds.map((userId) =>
-            removeMemberApi(selectedGroup.id, userId, Number(currentUserId))
-          )
+        const countRes = await getGroupMembersApi(selectedGroup.id);
+        setGroupMemberCount(
+          Array.isArray(countRes.data) ? countRes.data.length : 0
         );
-        toast.success("Xoá thành viên khỏi nhóm thành công! 🎉");
-        setMemberCandidates((prev) =>
-          prev.filter((item) => !selectedMemberIds.includes(getFriendId(item)))
-        );
-        setSelectedMemberIds([]);
-        setShowRemoveMemberModal(false);
-        try {
-          const countRes = await getGroupMembersApi(selectedGroup.id);
-          setGroupMemberCount(
-            Array.isArray(countRes.data) ? countRes.data.length : 0
-          );
-        } catch {
-          /* ignore */
-        }
-      } catch (error) {
-        console.error("Remove member lỗi:", error);
-        const message = error?.response?.data || "Xoá thành viên thất bại";
-
-        if (
-          typeof message === "string" &&
-          message.includes("Bạn không thuộc nhóm")
-        ) {
-          toast.error("Bạn không thuộc nhóm");
-          return;
-        }
-
-        if (
-          typeof message === "string" &&
-          message.includes("Bạn không có quyền")
-        ) {
-          toast.error("Bạn không có quyền");
-          return;
-        }
-
-        if (
-          typeof message === "string" &&
-          message.includes("Không thể tự xoá chính mình")
-        ) {
-          toast.error("Không thể tự xoá chính mình");
-          return;
-        }
-
-        if (
-          typeof message === "string" &&
-          message.includes("User không trong nhóm")
-        ) {
-          toast.error("User không trong nhóm");
-          return;
-        }
-
-        toast.error("Xoá thành viên thất bại");
+      } catch {
+        /* ignore */
       }
-    };
+    } catch (error) {
+      console.error("Remove member lỗi:", error);
+      const message = error?.response?.data || "Xoá thành viên thất bại";
 
-    const handleDeleteGroup = async () => {
-      if (!selectedGroup?.id || !currentUserId) return;
-
-      try {
-        await deleteGroupApi(selectedGroup.id, Number(currentUserId));
-
-        setConversations((prev) =>
-          prev.filter((item) => item.id !== `group_${selectedGroup.id}`)
-        );
-        setSelectedGroup(null);
-        setSelectedConversationId(null);
-        setMessages([]);
-        setShowGroupMenu(false);
-
-        toast.success("Giải tán nhóm thành công! 🎉");
-      } catch (error) {
-        const message = error?.response?.data || "Giải tán nhóm thất bại";
-
-        if (typeof message === "string" && message.includes("Group không tồn tại")) {
-          toast.error("Group không tồn tại");
-          return;
-        }
-
-        if (
-          typeof message === "string" &&
-          message.includes("Bạn không có quyền giải tán nhóm")
-        ) {
-          toast.error("Bạn không có quyền giải tán nhóm");
-          return;
-        }
-
-        toast.error("Giải tán nhóm thất bại");
+      if (
+        typeof message === "string" &&
+        message.includes("Bạn không thuộc nhóm")
+      ) {
+        toast.error("Bạn không thuộc nhóm");
+        return;
       }
-    };
 
-    const handleUpdateRole = async () => {
-      if (!selectedGroup?.id || !selectedRoleUserId || !currentUserId) return;
-
-      try {
-        await updateRoleApi(
-          selectedGroup.id,
-          Number(selectedRoleUserId),
-          selectedRoleValue,
-          Number(currentUserId)
-        );
-
-        setRoleCandidates((prev) =>
-          prev.map((member) =>
-            member.id === Number(selectedRoleUserId)
-              ? { ...member, role: selectedRoleValue }
-              : member
-          )
-        );
-        setShowUpdateRoleModal(false);
-        toast.success("Cập nhật quyền thành công! 🎉");
-      } catch (error) {
-        const message = error?.response?.data || "Cập nhật quyền thất bại";
-
-        if (typeof message === "string" && message.includes("Không thuộc nhóm")) {
-          toast.error("Không thuộc nhóm");
-          return;
-        }
-        if (typeof message === "string" && message.includes("Không có quyền")) {
-          toast.error("Không có quyền");
-          return;
-        }
-        if (typeof message === "string" && message.includes("User không tồn tại")) {
-          toast.error("User không tồn tại");
-          return;
-        }
-        if (typeof message === "string" && message.includes("Không thể sửa OWNER")) {
-          toast.error("Không thể sửa OWNER");
-          return;
-        }
-
-        toast.error("Cập nhật quyền thất bại");
+      if (
+        typeof message === "string" &&
+        message.includes("Bạn không có quyền")
+      ) {
+        toast.error("Bạn không có quyền");
+        return;
       }
-    };
 
-    const currentTitle = selectedGroup
-      ? selectedGroup.name
-      : selectedUser?.username || "Cuộc trò chuyện";
+      if (
+        typeof message === "string" &&
+        message.includes("Không thể tự xoá chính mình")
+      ) {
+        toast.error("Không thể tự xoá chính mình");
+        return;
+      }
 
-    const currentAvatar = selectedGroup
-      ? DEFAULT_AVATAR
-      : resolveAvatar(selectedUser?.avatar);
+      if (
+        typeof message === "string" &&
+        message.includes("User không trong nhóm")
+      ) {
+        toast.error("User không trong nhóm");
+        return;
+      }
 
-    return (
-      <div className="w-screen h-screen flex bg-[#0f172a] overflow-hidden text-slate-200 font-sans relative">
-        <div className="z-30 border-r border-slate-800/60 shadow-2xl bg-[#0b1120]">
-          <Sidebar
-            user={user}
-            showSettings={showSettings}
-            setShowSettings={setShowSettings}
-            onLogout={handleLogout}
-            onOpenProfile={() => setShowProfile(true)}
-            onChangePassword={() => setShowChangePassword(true)}
-            onSelectTab={setActiveTab}
-            activeTab={activeTab}
-          />
-        </div>
+      toast.error("Xoá thành viên thất bại");
+    }
+  };
 
-        {(activeTab === "chat" || activeTab === "group") && (
-          <aside className="w-[340px] shrink-0 border-r border-slate-800/60 bg-[#111827] flex flex-col">
-            <div className="p-4 border-b border-slate-800/60">
-              <div className="text-xl font-semibold text-white mb-1">
-                Cuộc trò chuyện
-              </div>
-              <div className="text-sm text-slate-400">
-                {conversations.length} hội thoại
-              </div>
+  const handleDeleteGroup = async () => {
+    if (!selectedGroup?.id || !currentUserId) return;
+
+    try {
+      await deleteGroupApi(selectedGroup.id, Number(currentUserId));
+
+      setConversations((prev) =>
+        prev.filter((item) => item.id !== `group_${selectedGroup.id}`)
+      );
+      setSelectedGroup(null);
+      setSelectedConversationId(null);
+      setMessages([]);
+      setShowGroupMenu(false);
+
+      toast.success("Giải tán nhóm thành công! 🎉");
+    } catch (error) {
+      const message = error?.response?.data || "Giải tán nhóm thất bại";
+
+      if (
+        typeof message === "string" &&
+        message.includes("Group không tồn tại")
+      ) {
+        toast.error("Group không tồn tại");
+        return;
+      }
+
+      if (
+        typeof message === "string" &&
+        message.includes("Bạn không có quyền giải tán nhóm")
+      ) {
+        toast.error("Bạn không có quyền giải tán nhóm");
+        return;
+      }
+
+      toast.error("Giải tán nhóm thất bại");
+    }
+  };
+
+  const handleChangeChatBackground = async (e) => {
+    const file = e.target.files?.[0];
+
+    if (!file || !roomId) return;
+
+    try {
+      const uploadRes = await uploadFileApi(file);
+
+      const backgroundUrl =
+        uploadRes.data?.url ||
+        uploadRes.data?.fileUrl ||
+        uploadRes.data?.path ||
+        uploadRes.data;
+
+      if (!backgroundUrl) {
+        toast.error("Upload ảnh nền thất bại");
+        return;
+      }
+
+      const scope = backgroundShared ? "SHARED" : "PERSONAL";
+
+      await updateChatBackgroundApi(roomId, backgroundUrl, scope);
+
+      setChatBackground(backgroundUrl);
+
+      toast.success(
+        backgroundShared
+          ? "Đã đổi nền cho cả đoạn chat"
+          : "Đã đổi nền chỉ mình bạn"
+      );
+    } catch (error) {
+      console.error("Đổi nền chat lỗi:", error);
+      toast.error(error?.response?.data || "Đổi nền thất bại");
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  const handleUpdateRole = async () => {
+    if (!selectedGroup?.id || !selectedRoleUserId || !currentUserId) return;
+
+    try {
+      await updateRoleApi(
+        selectedGroup.id,
+        Number(selectedRoleUserId),
+        selectedRoleValue,
+        Number(currentUserId)
+      );
+
+      setRoleCandidates((prev) =>
+        prev.map((member) =>
+          member.id === Number(selectedRoleUserId)
+            ? { ...member, role: selectedRoleValue }
+            : member
+        )
+      );
+      setShowUpdateRoleModal(false);
+      toast.success("Cập nhật quyền thành công! 🎉");
+    } catch (error) {
+      const message = error?.response?.data || "Cập nhật quyền thất bại";
+
+      if (typeof message === "string" && message.includes("Không thuộc nhóm")) {
+        toast.error("Không thuộc nhóm");
+        return;
+      }
+      if (typeof message === "string" && message.includes("Không có quyền")) {
+        toast.error("Không có quyền");
+        return;
+      }
+      if (
+        typeof message === "string" &&
+        message.includes("User không tồn tại")
+      ) {
+        toast.error("User không tồn tại");
+        return;
+      }
+      if (
+        typeof message === "string" &&
+        message.includes("Không thể sửa OWNER")
+      ) {
+        toast.error("Không thể sửa OWNER");
+        return;
+      }
+
+      toast.error("Cập nhật quyền thất bại");
+    }
+  };
+
+  const currentTitle = selectedGroup
+    ? selectedGroup.name
+    : friendNickname || selectedUser?.username || "Cuộc trò chuyện";
+
+  const handleOpenPrivateInfoModal = async () => {
+    if (!selectedUser?.id) return;
+
+    setShowMenu(false);
+    setPrivateInfo(selectedUser);
+    setShowPrivateInfoModal(true);
+
+    try {
+      setPrivateInfoLoading(true);
+
+      const res = await getUserInfoApi(selectedUser.id);
+
+      setPrivateInfo(res.data);
+    } catch (error) {
+      console.error("Load user info lỗi:", error);
+      toast.error("Không tải được thông tin người dùng");
+    } finally {
+      setPrivateInfoLoading(false);
+    }
+  };
+
+  const currentAvatar = selectedGroup
+    ? resolveAvatar(selectedGroup?.avatar)
+    : resolveAvatar(selectedUser?.avatar);
+
+  return (
+    <div className="w-screen h-screen flex bg-[#0f172a] overflow-hidden text-slate-200 font-sans relative">
+      <div className="relative z-[200] border-r border-slate-800/60 shadow-2xl bg-[#0b1120]">
+        <Sidebar
+          user={user}
+          showSettings={showSettings}
+          setShowSettings={setShowSettings}
+          onLogout={handleLogout}
+          onOpenProfile={() => setShowProfile(true)}
+          onChangePassword={() => setShowChangePassword(true)}
+          onSelectTab={setActiveTab}
+          activeTab={activeTab}
+        />
+      </div>
+
+      {(activeTab === "chat" || activeTab === "group") && (
+        <aside className="w-[340px] shrink-0 border-r border-slate-800/60 bg-[#111827] flex flex-col">
+          <div className="p-4 border-b border-slate-800/60">
+            <div className="text-xl font-semibold text-white mb-1">
+              Cuộc trò chuyện
             </div>
-
-            <div className="flex-1 overflow-y-auto p-2 space-y-2">
-              {conversations.length === 0 ? (
-                <div className="text-slate-500 text-sm px-3 py-4">
-                  Chưa có cuộc trò chuyện nào
-                </div>
-              ) : (
-                conversations.map((item) => {
-                  const isActive = selectedConversationId === item.id;
-
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => handleSelectConversation(item)}
-                      className={`w-full flex items-center gap-3 p-3 rounded-2xl text-left transition ${
-                        isActive
-                          ? "bg-blue-500/20 border border-blue-500/30"
-                          : "hover:bg-white/5 border border-transparent"
-                      }`}
-                    >
-                      <img
-                        src={item.avatar || DEFAULT_AVATAR}
-                        alt=""
-                        className="w-14 h-14 rounded-full object-cover bg-slate-700 shrink-0"
-                        onError={(e) => {
-                          e.currentTarget.src = DEFAULT_AVATAR;
-                        }}
-                      />
-
-                      <div className="min-w-0 flex-1">
-                        <div className="text-white font-medium truncate flex items-center justify-between gap-2">
-                          <span className="truncate">{item.name}</span>
-                          {item.unreadCount > 0 && (
-                            <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-blue-500 text-white text-[11px] leading-[22px] text-center font-semibold">
-                              {item.unreadCount > 99 ? "99+" : item.unreadCount}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-slate-400 mt-1 truncate">
-                          {item.type === "GROUP" ? "Nhóm chat" : "Chat cá nhân"}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
+            <div className="text-sm text-slate-400">
+              {conversations.length} hội thoại
             </div>
-          </aside>
-        )}
+          </div>
 
-        <main className="flex-1 flex flex-col bg-gradient-to-b from-[#1e293b] to-[#0f172a] relative z-40">
-          {activeTab === "chat" &&
-            (!selectedUser && !selectedGroup ? (
-              <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-                <div className="w-24 h-24 bg-slate-800/50 rounded-full flex items-center justify-center shadow-inner">
-                  <span className="text-4xl">💬</span>
-                </div>
-                <p className="text-slate-500 font-medium">
-                  Chọn một cuộc trò chuyện để bắt đầu
-                </p>
+          <div className="flex-1 overflow-y-auto p-2 space-y-2">
+            {conversations.length === 0 ? (
+              <div className="text-slate-500 text-sm px-3 py-4">
+                Chưa có cuộc trò chuyện nào
               </div>
             ) : (
-              <>
-                <header className="h-20 px-8 flex items-center justify-between bg-slate-900/40 backdrop-blur-xl border-b border-white/5 shadow-lg z-20">
-                  <div className="flex items-center gap-4">
-                    <div className="relative group">
-                      <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full opacity-75"></div>
-                      <img
-                        src={currentAvatar}
-                        alt=""
-                        className={`relative w-12 h-12 rounded-full object-cover border-2 border-slate-900 bg-slate-700 ${
-                          selectedGroup ? "cursor-pointer" : ""
-                        }`}
-                        onClick={() => {
-                          if (!selectedGroup) return;
-                          setShowGroupMenu((prev) => !prev);
-                        }}
-                        onError={(e) => {
-                          e.currentTarget.src = DEFAULT_AVATAR;
-                        }}
-                      />
-                      {!selectedGroup && (
-                        <span
-                          className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-slate-800 ${
-                            onlineUsers.has(Number(selectedUser?.id))
-                              ? "bg-emerald-500"
-                              : "bg-slate-500"
-                          }`}
-                        />
-                      )}
-                      {selectedGroup && showGroupMenu && (
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          className="absolute left-0 top-14 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden"
-                        >
-                          <button
-                            onClick={handleOpenViewMembersModal}
-                            className="w-full text-left px-4 py-3 hover:bg-slate-700/80 text-slate-100 transition border-b border-slate-700/80"
-                          >
-                            👥 Xem thành viên
-                            <span className="ml-1.5 text-xs font-semibold text-indigo-300">
-                              ({groupMemberCount})
-                            </span>
-                          </button>
-                          <button
-                            onClick={handleOpenAddMemberModal}
-                            className="w-full text-left px-4 py-3 hover:bg-blue-500/10 text-blue-300 transition"
-                          >
-                            ➕ Thêm thành viên
-                          </button>
-                          <button
-                            onClick={handleOpenRemoveMemberModal}
-                            className="w-full text-left px-4 py-3 hover:bg-red-500/10 text-red-300 transition"
-                          >
-                            ➖ Xoá thành viên
-                          </button>
-                          <button
-                            onClick={handleOpenUpdateRoleModal}
-                            className="w-full text-left px-4 py-3 hover:bg-violet-500/10 text-violet-300 transition"
-                          >
-                            🛡️ Cập nhật quyền
-                          </button>
-                          <button
-                            onClick={handleDeleteGroup}
-                            className="w-full text-left px-4 py-3 hover:bg-red-500/20 text-red-400 transition"
-                          >
-                            🗑️ Giải tán nhóm
-                          </button>
+              conversations.map((item) => {
+                const isActive = selectedConversationId === item.id;
 
-                          <button
-                            onClick={handleLeaveGroup}
-                            className="w-full text-left px-4 py-3 hover:bg-yellow-500/10 text-yellow-300 transition"
-                          >
-                            🚪 Rời nhóm
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSelectConversation(item)}
+                    className={`w-full flex items-center gap-3 p-3 rounded-2xl text-left transition ${
+                      isActive
+                        ? "bg-blue-500/20 border border-blue-500/30"
+                        : "hover:bg-white/5 border border-transparent"
+                    }`}
+                  >
+                    <img
+                      src={item.avatar || DEFAULT_AVATAR}
+                      alt=""
+                      className="w-14 h-14 rounded-full object-cover bg-slate-700 shrink-0"
+                      onError={(e) => {
+                        e.currentTarget.src = DEFAULT_AVATAR;
+                      }}
+                    />
 
-                    <div className="flex flex-col">
-                      <h2 className="text-white text-lg font-bold tracking-tight uppercase">
-                        {currentTitle}
-                      </h2>
-                      <div className="flex items-center gap-1.5">
-                        {!selectedGroup &&
-                        onlineUsers.has(Number(selectedUser?.id)) ? (
-                          <>
-                            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-                            <span className="text-xs text-emerald-400 font-medium">
-                              Đang hoạt động
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-xs text-slate-400 font-medium">
-                            {selectedGroup
-                              ? `Nhóm chat · ${groupMemberCount} thành viên`
-                              : "Ngoại tuyến"}
+                    <div className="min-w-0 flex-1">
+                      <div className="text-white font-medium truncate flex items-center justify-between gap-2">
+                        <span className="truncate">{item.name}</span>
+                        {item.unreadCount > 0 && (
+                          <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-blue-500 text-white text-[11px] leading-[22px] text-center font-semibold">
+                            {item.unreadCount > 99 ? "99+" : item.unreadCount}
                           </span>
                         )}
                       </div>
+                      <div className="text-xs text-slate-400 mt-1 truncate">
+                        {item.lastMessageText ||
+                          (item.type === "GROUP"
+                            ? "Nhóm chat"
+                            : "Chat cá nhân")}
+                      </div>
                     </div>
-                  </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </aside>
+      )}
 
-                  <div className="flex items-center gap-2 relative">
-                    <button
-                      onClick={() => setShowMessageSearch((prev) => !prev)}
-                      className={`p-2.5 rounded-full hover:bg-white/5 ${
-                        showMessageSearch ? "text-blue-400" : "text-slate-400"
-                      }`}
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
+      <main className="flex-1 flex flex-col bg-gradient-to-b from-[#1e293b] to-[#0f172a] relative z-40">
+        {activeTab === "chat" &&
+          (!selectedUser && !selectedGroup ? (
+            <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+              <div className="w-24 h-24 bg-slate-800/50 rounded-full flex items-center justify-center shadow-inner">
+                <span className="text-4xl">💬</span>
+              </div>
+              <p className="text-slate-500 font-medium">
+                Chọn một cuộc trò chuyện để bắt đầu
+              </p>
+            </div>
+          ) : (
+            <>
+              <header className="h-[92px] px-8 flex items-center justify-between bg-[#111827]/95 backdrop-blur-xl border-b border-slate-700/60 shadow-[0_8px_24px_rgba(0,0,0,0.35)] z-20">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="relative shrink-0">
+                    <div className="absolute -inset-[3px] rounded-full bg-gradient-to-br from-indigo-500 via-violet-500 to-blue-500 opacity-90"></div>
+
+                    <img
+                      src={currentAvatar}
+                      alt=""
+                      className="relative w-14 h-14 rounded-full object-cover border-2 border-slate-900 bg-slate-700 cursor-pointer shadow-lg"
+                      onClick={() => {
+                        if (selectedGroup) {
+                          setShowGroupMenu(true);
+                        } else {
+                          handleOpenPrivateInfoModal();
+                        }
+                      }}
+                      onError={(e) => {
+                        e.currentTarget.src = DEFAULT_AVATAR;
+                      }}
+                    />
+
+                    {selectedGroup && !isRemovedFromGroup && (
+                      <label
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center cursor-pointer hover:bg-blue-600 border-2 border-slate-900 z-50 shadow-md"
+                        title="Đổi ảnh nhóm"
                       >
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                      </svg>
-                    </button>
+                        📷
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleChangeGroupAvatar}
+                        />
+                      </label>
+                    )}
 
                     {!selectedGroup && (
-                      <>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowMenu((prev) => !prev);
-                          }}
-                          className="p-2.5 rounded-full hover:bg-white/5 text-slate-400 text-xl"
-                        >
-                          ⋮
-                        </button>
-
-                        {showMenu && (
-                          <div
-                            onClick={(e) => e.stopPropagation()}
-                            className="absolute right-0 top-12 w-52 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden"
-                          >
-                            <button
-                              onClick={async () => {
-                                try {
-                                  if (blockStatus.blockedByMe) {
-                                    await unblockUserApi(selectedUser.id);
-                                  } else {
-                                    await blockUserApi(selectedUser.id);
-                                  }
-
-                                  const res = await getBlockStatusApi(
-                                    selectedUser.id
-                                  );
-
-                                  setBlockStatus({
-                                    blockedByMe: res.data?.blockedByMe ?? false,
-                                    blockedByOther:
-                                      res.data?.blockedByOther ?? false,
-                                  });
-
-                                  setShowMenu(false);
-                                } catch (err) {
-                                  console.log("Block/unblock lỗi:", err);
-                                }
-                              }}
-                              className={`w-full text-left px-4 py-3 transition ${
-                                blockStatus.blockedByMe
-                                  ? "hover:bg-green-500/10 text-green-400"
-                                  : "hover:bg-yellow-500/10 text-yellow-400"
-                              }`}
-                            >
-                              {blockStatus.blockedByMe
-                                ? "🔓 Bỏ chặn"
-                                : "🚫 Chặn người dùng"}
-                            </button>
-
-                            <div className="h-px bg-slate-700" />
-
-                            <button
-                              onClick={handleDeleteConversation}
-                              className="w-full text-left px-4 py-3 hover:bg-red-500/10 text-red-400 transition"
-                            >
-                              🗑️ Xoá hội thoại
-                            </button>
-                          </div>
-                        )}
-                      </>
+                      <span
+                        className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-slate-900 ${
+                          onlineUsers.has(Number(selectedUser?.id))
+                            ? "bg-emerald-500"
+                            : "bg-slate-500"
+                        }`}
+                      />
                     )}
                   </div>
-                </header>
 
-                <div className="flex-1 relative overflow-hidden">
-                  <ChatBox
-                    messages={messages}
-                    messagesEndRef={messagesEndRef}
-                    currentUserId={currentUserId}
-                    setMessages={setMessages}
-                    onForwardMessage={handleForwardClick}
-                    showSearch={showMessageSearch}
-                    onCloseSearch={() => setShowMessageSearch(false)}
-                  />
+                  <div className="flex flex-col min-w-0">
+                    <h2
+                      onClick={() => {
+                        if (!selectedGroup) {
+                          handleOpenPrivateInfoModal();
+                        }
+                      }}
+                      className={`!text-white text-[22px] font-bold tracking-wide truncate max-w-[720px] drop-shadow-sm ${
+                        !selectedGroup
+                          ? "cursor-pointer hover:!text-blue-300"
+                          : ""
+                      }`}
+                    >
+                      {currentTitle}
+                    </h2>
+
+                    <div className="flex items-center gap-2 mt-1">
+                      {!selectedGroup &&
+                      onlineUsers.has(Number(selectedUser?.id)) ? (
+                        <>
+                          <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                          <span className="text-sm text-emerald-400 font-medium">
+                            Đang hoạt động
+                          </span>
+                        </>
+                      ) : selectedGroup ? (
+                        <>
+                          <span className="w-2.5 h-2.5 bg-blue-400 rounded-full"></span>
+                          <span className="text-sm text-slate-300 font-medium">
+                            Nhóm chat · {groupMemberCount} thành viên
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-2.5 h-2.5 bg-slate-500 rounded-full"></span>
+                          <span className="text-sm text-slate-400 font-medium">
+                            Ngoại tuyến
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="p-4 bg-transparent">
-                  {selectedGroup ? (
-                    isRemovedFromGroup ? (
-                      <div className="text-center text-red-400 font-medium">
-                        🚫 Bạn đã bị xoá ra khỏi nhóm và không thể trả lời cuộc
-                        trò chuyện này
+                <div className="flex items-center gap-2 relative shrink-0">
+                  <button
+                    onClick={() => setShowMessageSearch((prev) => !prev)}
+                    className={`w-11 h-11 rounded-full flex items-center justify-center transition ${
+                      showMessageSearch
+                        ? "bg-blue-500/20 text-blue-300"
+                        : "text-slate-300 hover:bg-white/10 hover:text-white"
+                    }`}
+                    title="Tìm tin nhắn"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="21"
+                      height="21"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                  </button>
+
+                  {!selectedGroup && selectedUser && (
+                    <button
+                      type="button"
+                      onClick={startAudioCall}
+                      className="w-11 h-11 rounded-full flex items-center justify-center text-slate-300 hover:bg-white/10 hover:text-white transition"
+                      title="Gọi thoại"
+                    >
+                      📞
+                    </button>
+                  )}
+                </div>
+              </header>
+
+              {pinnedMessages.length > 0 && (
+                <div className="relative">
+                  <div className="px-6 py-2 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowPinnedList((prev) => !prev)}
+                      className="flex items-center gap-3 min-w-0 text-left flex-1"
+                    >
+                      <span className="text-orange-400 text-lg">📌</span>
+
+                      <div className="min-w-0">
+                        <div className="text-xs text-slate-400">
+                          Tin nhắn đã ghim · {pinnedMessages.length}
+                        </div>
+
+                        <div className="text-sm text-white truncate max-w-[600px]">
+                          {pinnedMessages[0]?.content ||
+                            pinnedMessages[0]?.originalContent ||
+                            (pinnedMessages[0]?.fileUrl
+                              ? "Tệp đính kèm"
+                              : "Tin nhắn")}
+                        </div>
                       </div>
-                    ) : (
-                      <ChatInput
-                        input={input}
-                        setInput={setInput}
-                        onSend={handleSendMessage}
-                        onSendFile={handleSendFile}
-                      />
-                    )
-                  ) : blockStatus.blockedByMe ? (
-                    <div className="text-center text-red-400">
-                      🚫 Bạn đã chặn người này
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPinnedList((prev) => !prev)}
+                      className="text-sm text-slate-300 hover:text-blue-400 font-medium"
+                    >
+                      Xem tất cả
+                    </button>
+                  </div>
+
+                  {showPinnedList && (
+                    <div className="absolute left-0 right-0 top-full z-50 bg-slate-900 border-b border-slate-700 shadow-xl max-h-[260px] overflow-y-auto">
+                      {pinnedMessages.map((msg) => {
+                        const msgId = msg.id || msg._id;
+
+                        return (
+                          <div
+                            key={msgId}
+                            className="px-6 py-3 border-b border-slate-800 flex items-center justify-between gap-4 hover:bg-slate-800"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const el = document.getElementById(
+                                  `msg-${msgId}`
+                                );
+
+                                if (el) {
+                                  el.scrollIntoView({
+                                    behavior: "smooth",
+                                    block: "center",
+                                  });
+                                }
+
+                                setShowPinnedList(false);
+                              }}
+                              className="flex items-center gap-3 min-w-0 text-left flex-1"
+                            >
+                              <span className="text-orange-400">📌</span>
+
+                              <div className="min-w-0">
+                                <div className="text-sm text-white truncate">
+                                  {msg.content ||
+                                    msg.originalContent ||
+                                    (msg.fileUrl ? "Tệp đính kèm" : "Tin nhắn")}
+                                </div>
+
+                                <div className="text-xs text-slate-400 mt-0.5">
+                                  Bấm để đi tới tin nhắn
+                                </div>
+                              </div>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleUnpinMessage(msgId)}
+                              className="text-xs text-red-400 hover:text-red-300 shrink-0"
+                            >
+                              Bỏ ghim
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ) : blockStatus.blockedByOther ? (
-                    <div className="text-center text-yellow-400">
-                      ⚠️ Bạn đã bị người này chặn
+                  )}
+                </div>
+              )}
+
+              <div className="flex-1 relative overflow-hidden">
+                <ChatBox
+                  messages={messages}
+                  messagesEndRef={messagesEndRef}
+                  currentUserId={currentUserId}
+                  setMessages={setMessages}
+                  onForwardMessage={handleForwardClick}
+                  onPinMessage={handlePinMessage}
+                  onUnpinMessage={handleUnpinMessage}
+                  pollRealtimeMap={pollRealtimeMap}
+                  onReactMessage={async (messageId, emoji) => {
+                    try {
+                      await reactMessageApi(messageId, emoji);
+                    } catch (error) {
+                      console.error("React message lỗi:", error);
+                      toast.error("Thả cảm xúc thất bại");
+                    }
+                  }}
+                  showSearch={showMessageSearch}
+                  onCloseSearch={() => setShowMessageSearch(false)}
+                  chatBackground={chatBackground}
+                  onClearReactions={async (messageId) => {
+                    try {
+                      await clearMessageReactionsApi(messageId);
+                    } catch (error) {
+                      console.error("Xoá cảm xúc lỗi:", error);
+                      toast.error("Xoá cảm xúc thất bại");
+                    }
+                  }}
+                />
+              </div>
+
+              <div className="p-4 bg-transparent">
+                {selectedGroup ? (
+                  isRemovedFromGroup ? (
+                    <div className="text-center text-red-400 font-medium">
+                      🚫 Bạn đã bị xoá ra khỏi nhóm và không thể trả lời cuộc
+                      trò chuyện này
                     </div>
                   ) : (
                     <ChatInput
@@ -1534,130 +2932,1088 @@
                       setInput={setInput}
                       onSend={handleSendMessage}
                       onSendFile={handleSendFile}
+                      onOpenPoll={() => setShowPollModal(true)}
                     />
-                  )}
-                </div>
-              </>
-            ))}
-
-            
-
-          {activeTab !== "chat" && activeTab !== "group" && (
-            <div className="flex-1 p-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              {activeTab === "friends" && (
-                <FriendsList
-                  onSelectUser={handleSelectUser}
-                  onlineUsers={onlineUsers}
-                />
-              )}
-              {activeTab === "requests" && <FriendRequests />}
-              {activeTab === "search" && (
-                <FriendSearch onSelectUser={handleSelectUser} />
-              )}
-            </div>
-          )}
-
-          {activeTab === "group" && (
-            <CreateGroup
-              user={user}
-              friends={[]}
-              onCreated={(group) => {
-                handleSelectGroup(group);
-                setShowMenu(false);
-              }}
-            />
-          )}
-        </main>
-
-        {showForwardModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999]">
-            <div className="bg-slate-800 p-4 rounded-xl w-96 max-h-[500px] overflow-y-auto">
-              <h3 className="text-white mb-3">Chọn người để chuyển tiếp</h3>
-
-              <div className="mb-4">
-                <h4 className="text-slate-300 text-sm mb-2">
-                  Chuyển tiếp tới nhóm
-                </h4>
-                {forwardableGroups.length === 0 ? (
-                  <div className="text-slate-500 text-sm">
-                    Không có nhóm phù hợp để chuyển tiếp
+                  )
+                ) : blockStatus.blockedByMe ? (
+                  <div className="text-center text-red-400">
+                    🚫 Bạn đã chặn người này
+                  </div>
+                ) : blockStatus.blockedByOther ? (
+                  <div className="text-center text-yellow-400">
+                    ⚠️ Bạn đã bị người này chặn
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {forwardableGroups.map((group) => (
+                  <ChatInput
+                    input={input}
+                    setInput={setInput}
+                    onSend={handleSendMessage}
+                    onSendFile={handleSendFile}
+                  />
+                )}
+              </div>
+            </>
+          ))}
+
+        {activeTab !== "chat" && activeTab !== "group" && (
+          <div className="flex-1 p-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+            {activeTab === "friends" && (
+              <FriendsList
+                onSelectUser={handleSelectUser}
+                onlineUsers={onlineUsers}
+                currentUserId={currentUserId}
+              />
+            )}
+            {activeTab === "requests" && <FriendRequests />}
+            {activeTab === "search" && (
+              <FriendSearch onSelectUser={handleSelectUser} />
+            )}
+          </div>
+        )}
+
+        {activeTab === "group" && (
+          <CreateGroup
+            user={user}
+            friends={[]}
+            onCreated={(group) => {
+              handleSelectGroup(group);
+              setShowMenu(false);
+            }}
+          />
+        )}
+      </main>
+
+      {showForwardModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999]">
+          <div className="w-[760px] max-h-[88vh] bg-white text-slate-900 rounded-xl shadow-2xl overflow-hidden">
+            {/* HEADER */}
+            <div className="h-16 px-6 flex items-center justify-between border-b border-slate-200">
+              <h3 className="text-xl font-semibold">Chia sẻ</h3>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForwardModal(false);
+                  setForwardMessage(null);
+                  setSelectedForwardTargets([]);
+                }}
+                className="w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center text-3xl text-slate-600"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* SEARCH */}
+            <div className="px-6 py-4 border-b border-slate-100">
+              <input
+                value={forwardSearch}
+                onChange={(e) => setForwardSearch(e.target.value)}
+                placeholder="🔍 Tìm kiếm..."
+                className="w-full px-4 py-3 rounded-lg border border-blue-400 outline-none text-slate-900"
+              />
+            </div>
+
+            <div className="grid grid-cols-[1fr_320px] h-[430px]">
+              {/* LEFT */}
+              <div className="overflow-y-auto border-r border-slate-200">
+                <div className="px-6 py-3 flex gap-6 border-b border-slate-100 text-[16px]">
+                  <button className="text-blue-600 font-semibold border-b-2 border-blue-600 pb-2">
+                    Gần đây
+                  </button>
+                  <button className="text-slate-700 pb-2">
+                    Nhóm trò chuyện
+                  </button>
+                  <button className="text-slate-700 pb-2">Bạn bè</button>
+                </div>
+
+                <div className="py-2">
+                  {forwardTargets
+                    .filter((target) =>
+                      String(target.name || "")
+                        .toLowerCase()
+                        .includes(forwardSearch.trim().toLowerCase())
+                    )
+                    .map((target) => {
+                      const key = `${target.type}_${target.id}`;
+                      const checked = selectedForwardTargets.some(
+                        (item) => `${item.type}_${item.id}` === key
+                      );
+
+                      return (
+                        <button
+                          type="button"
+                          key={key}
+                          onClick={() => toggleForwardTarget(target)}
+                          className="w-full flex items-center gap-4 px-6 py-3 hover:bg-slate-50 text-left"
+                        >
+                          <span
+                            className={`w-5 h-5 rounded border flex items-center justify-center ${
+                              checked
+                                ? "bg-blue-500 border-blue-500 text-white"
+                                : "border-slate-300 bg-white"
+                            }`}
+                          >
+                            {checked ? "✓" : ""}
+                          </span>
+
+                          <img
+                            src={target.avatar || DEFAULT_AVATAR}
+                            alt=""
+                            className="w-12 h-12 rounded-full object-cover bg-slate-200"
+                            onError={(e) => {
+                              e.currentTarget.src = DEFAULT_AVATAR;
+                            }}
+                          />
+
+                          <div className="min-w-0">
+                            <div className="font-medium text-slate-900 truncate">
+                              {target.name}
+                            </div>
+                            <div className="text-sm text-slate-500">
+                              {target.type === "GROUP"
+                                ? "Nhóm trò chuyện"
+                                : "Bạn bè"}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* RIGHT */}
+              <div className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="font-semibold">
+                    Đã chọn: {selectedForwardTargets.length}/100
+                  </div>
+
+                  {selectedForwardTargets.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedForwardTargets([])}
+                      className="text-blue-600"
+                    >
+                      Xóa
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  {selectedForwardTargets.map((target) => (
+                    <div
+                      key={`${target.type}_${target.id}`}
+                      className="flex items-center gap-3"
+                    >
+                      <img
+                        src={target.avatar || DEFAULT_AVATAR}
+                        alt=""
+                        className="w-10 h-10 rounded-full object-cover bg-slate-200"
+                        onError={(e) => {
+                          e.currentTarget.src = DEFAULT_AVATAR;
+                        }}
+                      />
+
+                      <div className="flex-1 truncate">{target.name}</div>
+
                       <button
-                        key={group.id}
-                        onClick={() =>
-                          handleForwardToTarget({
-                            id: group.targetGroup?.id,
-                            type: "GROUP",
-                          })
-                        }
-                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 text-slate-200"
+                        type="button"
+                        onClick={() => toggleForwardTarget(target)}
+                        className="text-xl text-slate-500 hover:text-red-500"
                       >
-                        {group.name}
+                        ×
                       </button>
-                    ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* PREVIEW */}
+            <div className="px-6 py-4 border-t border-slate-200">
+              <div className="bg-slate-100 rounded-lg px-4 py-3">
+                <div className="font-semibold text-sm mb-1">
+                  Chia sẻ tin nhắn
+                </div>
+                <div className="text-slate-700 truncate">
+                  {forwardMessage?.originalContent ||
+                    forwardMessage?.content ||
+                    forwardMessage?.text ||
+                    (forwardMessage?.fileUrl ? "Tệp đính kèm" : "Tin nhắn")}
+                </div>
+              </div>
+            </div>
+
+            {/* FOOTER */}
+            <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForwardModal(false);
+                  setForwardMessage(null);
+                  setSelectedForwardTargets([]);
+                }}
+                className="px-7 py-3 rounded-lg bg-slate-100 text-slate-700 font-semibold"
+              >
+                Hủy
+              </button>
+
+              <button
+                type="button"
+                disabled={selectedForwardTargets.length === 0}
+                onClick={handleForwardToSelected}
+                className="px-7 py-3 rounded-lg bg-blue-600 text-white font-semibold disabled:opacity-50"
+              >
+                Chia sẻ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPrivateInfoModal && selectedUser && (
+        <div className="fixed inset-0 bg-black/55 backdrop-blur-[2px] flex items-center justify-center z-[1000]">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-[430px] max-h-[88vh] bg-white text-slate-900 rounded-2xl shadow-2xl overflow-hidden"
+          >
+            {/* HEADER */}
+            <div className="h-16 px-6 flex items-center justify-between border-b border-slate-100 bg-white">
+              <h3 className="text-[20px] font-semibold text-slate-900">
+                Thông tin tài khoản
+              </h3>
+
+              <button
+                type="button"
+                onClick={() => setShowPrivateInfoModal(false)}
+                className="w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center text-3xl text-slate-600"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* BODY CUỘN */}
+            <div className="max-h-[calc(88vh-64px)] overflow-y-auto">
+              {/* COVER */}
+              <div className="h-[190px] bg-slate-200 overflow-hidden">
+                {privateInfo?.coverImage ? (
+                  <img
+                    src={resolveAvatar(privateInfo.coverImage)}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-r from-blue-300 via-indigo-300 to-cyan-200" />
+                )}
+              </div>
+
+              {/* PROFILE */}
+              <div className="relative px-6 pt-16 pb-5 bg-white">
+                <img
+                  src={resolveAvatar(
+                    privateInfo?.avatar || selectedUser?.avatar
+                  )}
+                  alt=""
+                  className="absolute -top-12 left-5 w-24 h-24 rounded-full object-cover object-center border-4 border-white bg-slate-200 shadow-md"
+                  onError={(e) => {
+                    e.currentTarget.src = DEFAULT_AVATAR;
+                  }}
+                />
+
+                <div className="ml-32 -mt-10 min-h-[70px] flex flex-col justify-center">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-[24px] font-bold text-slate-900 truncate">
+                      {friendNickname ||
+                        privateInfo?.username ||
+                        selectedUser?.username ||
+                        "Người dùng"}
+                    </h4>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNicknameInput(friendNickname || "");
+                        setShowNicknameModal(true);
+                      }}
+                      className="text-slate-500 text-xl hover:text-blue-500 transition"
+                      title="Đổi biệt danh"
+                    >
+                      ✎
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-1">
+                    <span
+                      className={`w-2.5 h-2.5 rounded-full ${
+                        onlineUsers.has(Number(selectedUser?.id))
+                          ? "bg-emerald-500"
+                          : "bg-slate-400"
+                      }`}
+                    />
+
+                    <span
+                      className={`text-[15px] ${
+                        onlineUsers.has(Number(selectedUser?.id))
+                          ? "text-emerald-600"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {onlineUsers.has(Number(selectedUser?.id))
+                        ? "Đang hoạt động"
+                        : "Ngoại tuyến"}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPrivateInfoModal(false)}
+                  className="w-full mt-5 py-3 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-[17px]"
+                >
+                  Nhắn tin
+                </button>
+              </div>
+
+              <div className="h-2 bg-slate-100" />
+
+              {/* PERSONAL INFO */}
+              <div className="px-6 py-5 bg-white">
+                <h4 className="font-semibold text-slate-900 text-[20px] mb-5">
+                  Thông tin cá nhân
+                </h4>
+
+                {privateInfoLoading ? (
+                  <div className="text-slate-500 text-sm">
+                    Đang tải thông tin...
+                  </div>
+                ) : (
+                  <div className="space-y-4 text-[16px]">
+                    <div className="grid grid-cols-[130px_1fr] gap-4">
+                      <span className="text-slate-500">Giới tính</span>
+                      <span className="text-slate-900">
+                        {privateInfo?.gender || "Chưa cập nhật"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-[130px_1fr] gap-4">
+                      <span className="text-slate-500">Ngày sinh</span>
+                      <span className="text-slate-900">
+                        {privateInfo?.birthday || "Chưa cập nhật"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-[130px_1fr] gap-4">
+                      <span className="text-slate-500">Điện thoại</span>
+                      <span className="text-slate-900">
+                        {privateInfo?.phone || "Chưa cập nhật"}
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>
 
-              <h4 className="text-slate-300 text-sm mb-2">
-                Chuyển tiếp tới cá nhân
-              </h4>
-              <FriendsList
-                onSelectUser={(user) => handleForwardToTarget(user)}
-              />
+              <div className="h-2 bg-slate-100" />
+
+              {/* IMAGE SECTION */}
+              <div className="px-6 py-5 bg-white">
+                <h4 className="font-semibold text-slate-900 text-[20px] mb-5">
+                  Hình ảnh
+                </h4>
+
+                <div className="h-24 rounded-lg flex items-center justify-center text-slate-500 text-[16px]">
+                  Chưa có ảnh nào được chia sẻ
+                </div>
+              </div>
+
+              <div className="h-2 bg-slate-100" />
+
+              {/* ACTIONS */}
+              <div className="py-2 bg-white">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPrivateInfoModal(false);
+                    setShowMessageSearch(true);
+                  }}
+                  className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-left"
+                >
+                  <span className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-xl">
+                    🔍
+                  </span>
+                  <span className="font-medium text-[17px]">Tìm tin nhắn</span>
+                </button>
+
+                <div className="px-6 py-4 flex items-center justify-between border-t border-slate-100">
+                  <div className="pr-4">
+                    <div className="font-medium text-[16px] text-slate-900">
+                      Áp dụng cho cả đoạn chat
+                    </div>
+                    <div className="text-sm text-slate-500 mt-0.5">
+                      Tắt: chỉ mình bạn thấy · Bật: người còn lại hoặc nhóm cùng
+                      thấy
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setBackgroundShared((prev) => !prev)}
+                    className={`w-12 h-7 rounded-full p-1 transition ${
+                      backgroundShared ? "bg-blue-500" : "bg-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`block w-5 h-5 rounded-full bg-white transition ${
+                        backgroundShared ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <label className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-left cursor-pointer">
+                  <span className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-xl">
+                    🖼️
+                  </span>
+                  <span className="font-medium text-[17px]">
+                    Đổi nền đoạn chat
+                  </span>
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      handleChangeChatBackground(e);
+                      setShowPrivateInfoModal(false);
+                    }}
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      if (blockStatus.blockedByMe) {
+                        await unblockUserApi(selectedUser.id);
+                        toast.success("Đã bỏ chặn người dùng");
+                      } else {
+                        await blockUserApi(selectedUser.id);
+                        toast.success("Đã chặn người dùng");
+                      }
+
+                      const res = await getBlockStatusApi(selectedUser.id);
+
+                      setBlockStatus({
+                        blockedByMe: res.data?.blockedByMe ?? false,
+                        blockedByOther: res.data?.blockedByOther ?? false,
+                      });
+                    } catch (error) {
+                      console.log("Block/unblock lỗi:", error);
+                      toast.error("Thao tác thất bại");
+                    }
+                  }}
+                  className={`w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 text-left ${
+                    blockStatus.blockedByMe
+                      ? "text-emerald-600"
+                      : "text-yellow-600"
+                  }`}
+                >
+                  <span className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-xl">
+                    {blockStatus.blockedByMe ? "🔓" : "🚫"}
+                  </span>
+
+                  <span className="font-medium text-[17px]">
+                    {blockStatus.blockedByMe
+                      ? "Bỏ chặn người dùng"
+                      : "Chặn người dùng"}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleDeleteConversation();
+                    setShowPrivateInfoModal(false);
+                  }}
+                  className="w-full flex items-center gap-4 px-6 py-4 hover:bg-red-50 text-left text-red-500"
+                >
+                  <span className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-xl">
+                    🗑
+                  </span>
+                  <span className="font-medium text-[17px]">Xoá hội thoại</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNicknameModal && selectedUser && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1100]">
+          <div className="w-[420px] bg-white text-slate-900 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="h-16 px-5 flex items-center justify-between border-b border-slate-200">
+              <div>
+                <h3 className="text-lg font-semibold">Đổi biệt danh</h3>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Biệt danh này chỉ hiển thị với bạn
+                </p>
+              </div>
 
               <button
-                onClick={() => setShowForwardModal(false)}
-                className="mt-3 text-sm text-slate-400"
+                type="button"
+                onClick={() => setShowNicknameModal(false)}
+                className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-2xl text-slate-600"
               >
-                Đóng
+                ×
+              </button>
+            </div>
+
+            <div className="p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <img
+                  src={resolveAvatar(selectedUser?.avatar)}
+                  alt=""
+                  className="w-12 h-12 rounded-full object-cover bg-slate-200"
+                  onError={(e) => {
+                    e.currentTarget.src = DEFAULT_AVATAR;
+                  }}
+                />
+
+                <div className="min-w-0">
+                  <div className="font-semibold text-slate-900 truncate">
+                    {selectedUser?.username || "Người dùng"}
+                  </div>
+                  <div className="text-sm text-slate-500">
+                    Tên thật của người này sẽ không bị thay đổi
+                  </div>
+                </div>
+              </div>
+
+              <label className="text-sm font-medium text-slate-700 mb-2 block">
+                Biệt danh
+              </label>
+
+              <input
+                value={nicknameInput}
+                onChange={(e) => setNicknameInput(e.target.value)}
+                autoFocus
+                maxLength={50}
+                placeholder="Nhập biệt danh..."
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 outline-none focus:border-blue-500 text-slate-900"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleUpdateNickname();
+                  }
+                }}
+              />
+
+              <div className="text-right text-xs text-slate-400 mt-1">
+                {nicknameInput.length}/50
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-slate-200 flex justify-between gap-3">
+              <button
+                type="button"
+                disabled={savingNickname || !friendNickname}
+                onClick={() => handleUpdateNickname("")}
+                className="px-5 py-2.5 rounded-xl bg-red-50 text-red-500 font-semibold hover:bg-red-100 disabled:opacity-50"
+              >
+                Xoá biệt danh
+              </button>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  disabled={savingNickname}
+                  onClick={() => setShowNicknameModal(false)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 disabled:opacity-50"
+                >
+                  Huỷ
+                </button>
+
+                <button
+                  type="button"
+                  disabled={savingNickname}
+                  onClick={() => handleUpdateNickname()}
+                  className="px-5 py-2.5 rounded-xl bg-blue-500 text-white font-semibold hover:bg-blue-600 disabled:opacity-50"
+                >
+                  {savingNickname ? "Đang lưu..." : "Lưu"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedGroup && showGroupMenu && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999]">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-[430px] max-h-[88vh] bg-white text-slate-900 rounded-2xl shadow-2xl overflow-hidden"
+          >
+            {/* HEADER */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold">Thông tin nhóm</h3>
+
+              <button
+                type="button"
+                onClick={() => setShowGroupMenu(false)}
+                className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-2xl text-slate-600"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="max-h-[calc(88vh-65px)] overflow-y-auto">
+              {/* GROUP INFO */}
+              <div className="px-5 py-5">
+                <div className="flex items-center gap-4">
+                  <div className="relative shrink-0">
+                    <img
+                      src={currentAvatar}
+                      alt={selectedGroup.name}
+                      className="w-20 h-20 rounded-full object-cover bg-slate-200 border border-slate-300"
+                      onError={(e) => {
+                        e.currentTarget.src = DEFAULT_AVATAR;
+                      }}
+                    />
+
+                    {!isRemovedFromGroup && (
+                      <label
+                        className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-white border border-slate-300 shadow flex items-center justify-center cursor-pointer hover:bg-slate-100"
+                        title="Đổi ảnh nhóm"
+                      >
+                        📷
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleChangeGroupAvatar}
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold text-base truncate">
+                        {selectedGroup.name}
+                      </h4>
+
+                      {!isRemovedFromGroup && (
+                        <button
+                          type="button"
+                          onClick={handleOpenRenameGroupModal}
+                          className="text-slate-500 hover:text-blue-500"
+                          title="Đổi tên nhóm"
+                        >
+                          ✎
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="text-sm text-slate-500 mt-1">
+                      Nhóm chat · {groupMemberCount} thành viên
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowGroupMenu(false)}
+                  className="w-full mt-4 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-semibold text-slate-800"
+                >
+                  Nhắn tin
+                </button>
+
+                {isRemovedFromGroup && (
+                  <div className="mt-4 px-4 py-3 rounded-xl bg-red-50 text-red-600 text-sm font-medium leading-relaxed">
+                    🚫 Bạn đã bị xoá khỏi nhóm. Bạn chỉ có thể xem lại lịch sử
+                    chat trước đó và không thể thao tác với nhóm này.
+                  </div>
+                )}
+              </div>
+
+              <div className="h-2 bg-slate-100" />
+
+              {/* MEMBERS */}
+              {!isRemovedFromGroup && (
+                <>
+                  <div className="h-2 bg-slate-100" />
+
+                  {/* MEMBERS */}
+                  <div className="px-5 py-4">
+                    <button
+                      type="button"
+                      onClick={handleOpenViewMembersModal}
+                      className="w-full flex items-center justify-between"
+                    >
+                      <div>
+                        <h4 className="text-left font-semibold">
+                          Thành viên ({groupMemberCount})
+                        </h4>
+                        <p className="text-sm text-slate-500 mt-1">
+                          Xem danh sách thành viên trong nhóm
+                        </p>
+                      </div>
+
+                      <span className="text-slate-400 text-xl">›</span>
+                    </button>
+                  </div>
+                </>
+              )}
+
+              <div className="h-2 bg-slate-100" />
+
+              {/* ACTIONS */}
+              {!isRemovedFromGroup && (
+                <>
+                  <div className="h-2 bg-slate-100" />
+
+                  <div className="py-2">
+                    <div className="px-5 py-3 flex items-center justify-between border-b border-slate-100">
+                      <div className="pr-4">
+                        <div className="font-medium text-slate-900">
+                          Áp dụng nền cho cả nhóm
+                        </div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          Tắt: chỉ mình bạn thấy · Bật: mọi thành viên cùng thấy
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setBackgroundShared((prev) => !prev)}
+                        className={`w-12 h-7 rounded-full p-1 transition ${
+                          backgroundShared ? "bg-blue-500" : "bg-slate-300"
+                        }`}
+                      >
+                        <span
+                          className={`block w-5 h-5 rounded-full bg-white transition ${
+                            backgroundShared ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    <label className="w-full flex items-center gap-3 px-5 py-3 hover:bg-slate-50 text-left cursor-pointer">
+                      <span className="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center">
+                        🖼️
+                      </span>
+
+                      <div className="flex-1">
+                        <div className="font-medium text-slate-900">
+                          Đổi nền đoạn chat
+                        </div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {backgroundShared
+                            ? "Đang bật: đổi cho cả nhóm"
+                            : "Đang tắt: chỉ mình bạn thấy"}
+                        </div>
+                      </div>
+
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          handleChangeChatBackground(e);
+                          setShowGroupMenu(false);
+                        }}
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenAddMemberModal}
+                      className="w-full flex items-center gap-3 px-5 py-3 hover:bg-slate-50 text-left"
+                    >
+                      <span className="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center">
+                        +
+                      </span>
+                      <span className="font-medium">Thêm thành viên</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenRemoveMemberModal}
+                      className="w-full flex items-center gap-3 px-5 py-3 hover:bg-slate-50 text-left"
+                    >
+                      <span className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center">
+                        −
+                      </span>
+                      <span className="font-medium text-red-500">
+                        Xoá thành viên
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenUpdateRoleModal}
+                      className="w-full flex items-center gap-3 px-5 py-3 hover:bg-slate-50 text-left"
+                    >
+                      <span className="w-8 h-8 rounded-full bg-violet-50 text-violet-500 flex items-center justify-center">
+                        🛡
+                      </span>
+                      <span className="font-medium">Cập nhật quyền</span>
+                    </button>
+                  </div>
+                </>
+              )}
+              {/* DANGER */}
+              {!isRemovedFromGroup && (
+                <>
+                  <div className="h-2 bg-slate-100" />
+
+                  {/* DANGER */}
+                  <div className="py-2">
+                    <button
+                      type="button"
+                      onClick={handleDeleteGroup}
+                      className="w-full flex items-center gap-3 px-5 py-3 hover:bg-red-50 text-left"
+                    >
+                      <span className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center">
+                        🗑
+                      </span>
+                      <span className="font-medium text-red-500">
+                        Giải tán nhóm
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenLeaveGroupConfirm}
+                      className="w-full flex items-center gap-3 px-5 py-3 hover:bg-red-50 text-left"
+                    >
+                      <span className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center">
+                        🚪
+                      </span>
+                      <span className="font-medium text-red-500">Rời nhóm</span>
+                    </button>
+                  </div>
+                </>
+              )}
+
+              <div className="h-2 bg-slate-100" />
+
+              <div className="py-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleDeleteConversation();
+                    setShowGroupMenu(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-5 py-3 hover:bg-red-50 text-left"
+                >
+                  <span className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center">
+                    🗑
+                  </span>
+
+                  <div>
+                    <div className="font-medium text-red-500">
+                      Xoá hội thoại
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLeaveConfirmModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1200]">
+          <div className="w-[400px] bg-white text-slate-900 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Rời nhóm?
+                </h3>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Bạn vẫn có thể xem lại lịch sử chat trước đó
+                </p>
+              </div>
+
+              <button
+                type="button"
+                disabled={leavingGroup}
+                onClick={() => setShowLeaveConfirmModal(false)}
+                className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-2xl text-slate-600 disabled:opacity-50"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center text-2xl">
+                  🚪
+                </div>
+
+                <div className="min-w-0">
+                  <div className="font-semibold text-slate-900 truncate">
+                    {selectedGroup?.name || "Nhóm chat"}
+                  </div>
+                  <div className="text-sm text-slate-500">
+                    Sau khi rời nhóm, bạn không thể nhắn tiếp trong nhóm này.
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-600 leading-relaxed">
+                Bạn có chắc muốn rời khỏi nhóm này không?
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={leavingGroup}
+                onClick={() => setShowLeaveConfirmModal(false)}
+                className="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 disabled:opacity-50"
+              >
+                Huỷ
+              </button>
+
+              <button
+                type="button"
+                disabled={leavingGroup}
+                onClick={handleConfirmLeaveGroup}
+                className="px-5 py-2.5 rounded-xl bg-red-500 text-white font-semibold hover:bg-red-600 disabled:opacity-50"
+              >
+                {leavingGroup ? "Đang rời..." : "Rời nhóm"}
               </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {showViewMembersModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999]">
-            <div className="bg-slate-800 p-4 rounded-xl w-[440px] max-h-[560px] overflow-y-auto shadow-2xl border border-slate-700">
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div>
-                  <h3 className="text-white text-lg font-semibold">
-                    Thành viên nhóm
-                  </h3>
-                  <p className="text-slate-400 text-sm mt-0.5">
-                    {selectedGroup?.name}{" "}
-                    <span className="text-indigo-300 font-medium">
-                      · {viewMembersLoading ? "…" : viewMembersList.length}{" "}
-                      người
-                    </span>
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowViewMembersModal(false)}
-                  className="text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-white/5"
-                >
-                  ✕
-                </button>
+      {showPollModal && roomId && (
+        <CreatePollModal
+          roomId={roomId}
+          onClose={() => setShowPollModal(false)}
+          onCreated={async () => {
+            setShowPollModal(false);
+            await reloadCurrentRoom();
+          }}
+        />
+      )}
+
+      {showRenameGroupModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1000]">
+          <div className="w-[420px] bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-white text-lg font-semibold">
+                  Đổi tên nhóm
+                </h3>
+                <p className="text-slate-400 text-sm mt-0.5">
+                  Nhập tên mới cho nhóm chat
+                </p>
               </div>
 
+              <button
+                type="button"
+                onClick={() => setShowRenameGroupModal(false)}
+                className="w-9 h-9 rounded-full hover:bg-white/10 text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5">
+              <label className="text-slate-300 text-sm mb-2 block">
+                Tên nhóm
+              </label>
+
+              <input
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                autoFocus
+                maxLength={80}
+                placeholder="Nhập tên nhóm..."
+                className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-600 text-white outline-none focus:border-indigo-500"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleUpdateGroupName();
+                  }
+                }}
+              />
+
+              <div className="text-right text-xs text-slate-500 mt-1">
+                {newGroupName.length}/80
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-slate-700 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={renamingGroup}
+                onClick={() => setShowRenameGroupModal(false)}
+                className="px-5 py-2.5 rounded-xl bg-slate-700 text-slate-200 hover:bg-slate-600 disabled:opacity-50"
+              >
+                Huỷ
+              </button>
+
+              <button
+                type="button"
+                disabled={renamingGroup || !newGroupName.trim()}
+                onClick={handleUpdateGroupName}
+                className="px-5 py-2.5 rounded-xl bg-indigo-500 text-white font-semibold hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {renamingGroup ? "Đang lưu..." : "Lưu"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showViewMembersModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999]">
+          <div className="w-[430px] max-h-[88vh] bg-white text-slate-900 rounded-2xl shadow-2xl overflow-hidden">
+            {/* HEADER */}
+            <div className="h-16 px-5 flex items-center justify-between border-b border-slate-200 bg-white">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Thành viên nhóm
+                </h3>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  {selectedGroup?.name} ·{" "}
+                  {viewMembersLoading
+                    ? "Đang tải..."
+                    : `${viewMembersList.length} người`}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowViewMembersModal(false)}
+                className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-2xl text-slate-600"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* BODY */}
+            <div className="max-h-[calc(88vh-64px)] overflow-y-auto scrollbar-thin">
               {viewMembersLoading ? (
-                <div className="text-slate-400 text-sm py-8 text-center">
-                  Đang tải danh sách…
+                <div className="py-12 text-center text-slate-500 text-sm">
+                  Đang tải danh sách thành viên...
                 </div>
               ) : viewMembersList.length === 0 ? (
-                <div className="text-slate-400 text-sm py-6">
+                <div className="py-12 text-center text-slate-500 text-sm">
                   Không có dữ liệu thành viên
                 </div>
               ) : (
-                <ul className="space-y-2">
+                <div className="py-2">
                   {viewMembersList.map((member) => (
-                    <li
+                    <div
                       key={member.id}
-                      className="flex items-center gap-3 p-2 rounded-lg bg-slate-900/40 border border-slate-700/50"
+                      className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition"
                     >
                       <img
                         src={resolveAvatar(member?.avatar)}
@@ -1665,268 +4021,634 @@
                         onError={(e) => {
                           e.currentTarget.src = DEFAULT_AVATAR;
                         }}
-                        className="w-10 h-10 rounded-full object-cover bg-slate-700 shrink-0"
+                        className="w-12 h-12 rounded-full object-cover bg-slate-200 shrink-0"
                       />
+
                       <div className="flex-1 min-w-0">
-                        <div className="text-white font-medium truncate">
-                          {member.username}
+                        <div className="flex items-center gap-2">
+                          <div className="font-semibold text-slate-900 truncate">
+                            {member.username}
+                          </div>
+
                           {Number(member.id) === Number(currentUserId) && (
-                            <span className="text-slate-500 font-normal text-xs ml-1">
+                            <span className="text-xs text-slate-500">
                               (bạn)
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-slate-400 mt-0.5">
+
+                        <div className="text-sm text-slate-500 mt-0.5">
                           {memberRoleLabel(member.role)}
                         </div>
                       </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
 
-              <div className="mt-4 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowViewMembersModal(false)}
-                  className="px-4 py-2 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600"
-                >
-                  Đóng
-                </button>
-              </div>
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          member.role === "OWNER"
+                            ? "bg-yellow-50 text-yellow-600"
+                            : member.role === "ADMIN"
+                            ? "bg-blue-50 text-blue-600"
+                            : "bg-slate-100 text-slate-500"
+                        }`}
+                      >
+                        {memberRoleLabel(member.role)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {showAddMemberModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999]">
-            <div className="bg-slate-800 p-4 rounded-xl w-[420px] max-h-[520px] overflow-y-auto">
-              <h3 className="text-white mb-3">Thêm thành viên vào nhóm</h3>
+      {showAddMemberModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999]">
+          <div className="w-[460px] max-h-[88vh] bg-white text-slate-900 rounded-2xl shadow-2xl overflow-hidden">
+            {/* HEADER */}
+            <div className="h-16 px-5 flex items-center justify-between border-b border-slate-200 bg-white">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Thêm thành viên
+                </h3>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Chọn bạn bè để thêm vào nhóm
+                </p>
+              </div>
 
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddMemberModal(false);
+                  setSelectedMemberIds([]);
+                }}
+                className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-2xl text-slate-600"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* BODY */}
+            <div className="max-h-[calc(88vh-144px)] overflow-y-auto">
               {friendCandidates.length === 0 ? (
-                <div className="text-slate-400 text-sm">
-                  Chưa có bạn bè để thêm
+                <div className="py-14 px-5 text-center">
+                  <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-3xl mb-3">
+                    👥
+                  </div>
+                  <div className="font-semibold text-slate-800">
+                    Không có bạn bè để thêm
+                  </div>
+                  <div className="text-sm text-slate-500 mt-1">
+                    Tất cả bạn bè của bạn có thể đã ở trong nhóm
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="py-2">
                   {friendCandidates.map((friend, index) => {
                     const friendId = getFriendId(friend);
                     const checked = selectedMemberIds.includes(friendId);
+
                     return (
-                      <label
+                      <button
+                        type="button"
                         key={friendId || index}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer"
+                        onClick={() => toggleSelectMember(friend)}
+                        className={`w-full flex items-center gap-3 px-5 py-3 text-left transition ${
+                          checked ? "bg-blue-50" : "hover:bg-slate-50"
+                        }`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleSelectMember(friend)}
-                        />
+                        <div
+                          className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                            checked
+                              ? "border-blue-500 bg-blue-500 text-white"
+                              : "border-slate-300 bg-white"
+                          }`}
+                        >
+                          {checked && <span className="text-xs">✓</span>}
+                        </div>
+
                         <img
                           src={resolveAvatar(friend?.avatar)}
                           alt={getFriendName(friend)}
                           onError={(e) => {
                             e.currentTarget.src = DEFAULT_AVATAR;
                           }}
-                          className="w-9 h-9 rounded-full object-cover bg-slate-700"
+                          className="w-12 h-12 rounded-full object-cover bg-slate-200 shrink-0"
                         />
-                        <span className="text-white">
-                          {getFriendName(friend)}
-                        </span>
-                      </label>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-slate-900 truncate">
+                            {getFriendName(friend)}
+                          </div>
+                          <div className="text-sm text-slate-500 mt-0.5">
+                            Bạn bè
+                          </div>
+                        </div>
+                      </button>
                     );
                   })}
                 </div>
               )}
+            </div>
 
-              <div className="mt-4 flex justify-end gap-2">
+            {/* FOOTER */}
+            <div className="h-20 px-5 border-t border-slate-200 bg-white flex items-center justify-between">
+              <div className="text-sm text-slate-500">
+                Đã chọn{" "}
+                <span className="font-semibold text-blue-600">
+                  {selectedMemberIds.length}
+                </span>{" "}
+                thành viên
+              </div>
+
+              <div className="flex justify-end gap-3">
                 <button
-                  onClick={() => setShowAddMemberModal(false)}
-                  className="px-3 py-2 rounded-lg bg-slate-700 text-slate-200"
+                  type="button"
+                  onClick={() => {
+                    setShowAddMemberModal(false);
+                    setSelectedMemberIds([]);
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200"
                 >
                   Huỷ
                 </button>
+
                 <button
+                  type="button"
                   onClick={handleAddMembersToGroup}
                   disabled={selectedMemberIds.length === 0}
-                  className="px-3 py-2 rounded-lg bg-blue-500 text-white disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl bg-blue-500 text-white font-semibold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Thêm
                 </button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {showRemoveMemberModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999]">
-            <div className="bg-slate-800 p-4 rounded-xl w-[420px] max-h-[520px] overflow-y-auto">
-              <h3 className="text-white mb-3">Xoá thành viên khỏi nhóm</h3>
+      {showRemoveMemberModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999]">
+          <div className="w-[460px] max-h-[88vh] bg-white text-slate-900 rounded-2xl shadow-2xl overflow-hidden">
+            {/* HEADER */}
+            <div className="h-16 px-5 flex items-center justify-between border-b border-slate-200 bg-white">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Xoá thành viên
+                </h3>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Chọn thành viên muốn xoá khỏi nhóm
+                </p>
+              </div>
 
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRemoveMemberModal(false);
+                  setSelectedMemberIds([]);
+                }}
+                className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-2xl text-slate-600"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* BODY */}
+            <div className="max-h-[calc(88vh-144px)] overflow-y-auto">
               {memberCandidates.length === 0 ? (
-                <div className="text-slate-400 text-sm">
-                  Không có thành viên để xoá
+                <div className="py-14 px-5 text-center">
+                  <div className="w-16 h-16 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto text-3xl mb-3">
+                    −
+                  </div>
+                  <div className="font-semibold text-slate-800">
+                    Không có thành viên để xoá
+                  </div>
+                  <div className="text-sm text-slate-500 mt-1">
+                    Chủ nhóm và chính bạn sẽ không hiển thị trong danh sách này
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="py-2">
                   {memberCandidates.map((member, index) => {
                     const memberId = getFriendId(member);
                     const checked = selectedMemberIds.includes(memberId);
 
                     return (
-                      <label
+                      <button
+                        type="button"
                         key={memberId || index}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer"
+                        onClick={() => toggleSelectMember(member)}
+                        className={`w-full flex items-center gap-3 px-5 py-3 text-left transition ${
+                          checked ? "bg-red-50" : "hover:bg-slate-50"
+                        }`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleSelectMember(member)}
-                        />
+                        <div
+                          className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                            checked
+                              ? "border-red-500 bg-red-500 text-white"
+                              : "border-slate-300 bg-white"
+                          }`}
+                        >
+                          {checked && <span className="text-xs">✓</span>}
+                        </div>
+
                         <img
                           src={resolveAvatar(member?.avatar)}
                           alt={getFriendName(member)}
                           onError={(e) => {
                             e.currentTarget.src = DEFAULT_AVATAR;
                           }}
-                          className="w-9 h-9 rounded-full object-cover bg-slate-700"
+                          className="w-12 h-12 rounded-full object-cover bg-slate-200 shrink-0"
                         />
-                        <span className="text-white">
-                          {getFriendName(member)}
+
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-slate-900 truncate">
+                            {getFriendName(member)}
+                          </div>
+
+                          <div className="text-sm text-slate-500 mt-0.5">
+                            {memberRoleLabel(member.role)}
+                          </div>
+                        </div>
+
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                            member.role === "ADMIN"
+                              ? "bg-blue-50 text-blue-600"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {memberRoleLabel(member.role)}
                         </span>
-                      </label>
+                      </button>
                     );
                   })}
                 </div>
               )}
+            </div>
 
-              <div className="mt-4 flex justify-end gap-2">
+            {/* FOOTER */}
+            <div className="h-20 px-5 border-t border-slate-200 bg-white flex items-center justify-between">
+              <div className="text-sm text-slate-500">
+                Đã chọn{" "}
+                <span className="font-semibold text-red-500">
+                  {selectedMemberIds.length}
+                </span>{" "}
+                thành viên
+              </div>
+
+              <div className="flex justify-end gap-3">
                 <button
-                  onClick={() => setShowRemoveMemberModal(false)}
-                  className="px-3 py-2 rounded-lg bg-slate-700 text-slate-200"
+                  type="button"
+                  onClick={() => {
+                    setShowRemoveMemberModal(false);
+                    setSelectedMemberIds([]);
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200"
                 >
                   Huỷ
                 </button>
+
                 <button
+                  type="button"
                   onClick={handleRemoveMembersFromGroup}
                   disabled={selectedMemberIds.length === 0}
-                  className="px-3 py-2 rounded-lg bg-red-500 text-white disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl bg-red-500 text-white font-semibold hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Xoá
+                  Xoá khỏi nhóm
                 </button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {showUpdateRoleModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999]">
-            <div className="bg-slate-800 p-4 rounded-xl w-[420px] max-h-[520px] overflow-y-auto">
-              <h3 className="text-white mb-3">Cập nhật quyền thành viên</h3>
+      {showUpdateRoleModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999]">
+          <div className="w-[460px] max-h-[88vh] bg-white text-slate-900 rounded-2xl shadow-2xl overflow-hidden">
+            {/* HEADER */}
+            <div className="h-16 px-5 flex items-center justify-between border-b border-slate-200 bg-white">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Cập nhật quyền
+                </h3>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Chọn thành viên và phân quyền mới
+                </p>
+              </div>
 
+              <button
+                type="button"
+                onClick={() => setShowUpdateRoleModal(false)}
+                className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-2xl text-slate-600"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* BODY */}
+            <div className="max-h-[calc(88vh-144px)] overflow-y-auto scrollbar-thin">
               {roleCandidates.length === 0 ? (
-                <div className="text-slate-400 text-sm">
+                <div className="py-12 text-center text-slate-500 text-sm">
                   Không có thành viên phù hợp để cập nhật quyền
                 </div>
               ) : (
-                <>
-                  <div className="space-y-2 mb-4">
-                    {roleCandidates.map((member, index) => (
-                      <label
+                <div className="py-2">
+                  {roleCandidates.map((member, index) => {
+                    const isSelected = selectedRoleUserId === member.id;
+
+                    return (
+                      <button
+                        type="button"
                         key={member.id || index}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer"
+                        onClick={() => {
+                          setSelectedRoleUserId(member.id);
+                          setSelectedRoleValue(member.role || "MEMBER");
+                        }}
+                        className={`w-full flex items-center gap-3 px-5 py-3 text-left transition ${
+                          isSelected ? "bg-blue-50" : "hover:bg-slate-50"
+                        }`}
                       >
-                        <input
-                          type="radio"
-                          name="update-role-user"
-                          checked={selectedRoleUserId === member.id}
-                          onChange={() => {
-                            setSelectedRoleUserId(member.id);
-                            setSelectedRoleValue(member.role || "MEMBER");
-                          }}
-                        />
+                        <div
+                          className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                            isSelected
+                              ? "border-blue-500 bg-blue-500"
+                              : "border-slate-300 bg-white"
+                          }`}
+                        >
+                          {isSelected && (
+                            <div className="w-2 h-2 rounded-full bg-white" />
+                          )}
+                        </div>
+
                         <img
                           src={resolveAvatar(member?.avatar)}
                           alt={getFriendName(member)}
                           onError={(e) => {
                             e.currentTarget.src = DEFAULT_AVATAR;
                           }}
-                          className="w-9 h-9 rounded-full object-cover bg-slate-700"
+                          className="w-12 h-12 rounded-full object-cover bg-slate-200 shrink-0"
                         />
+
                         <div className="flex-1 min-w-0">
-                          <div className="text-white truncate">
+                          <div className="font-semibold text-slate-900 truncate">
                             {getFriendName(member)}
                           </div>
-                          <div className="text-xs text-slate-400">
-                            Quyền hiện tại: {member.role}
+
+                          <div className="text-sm text-slate-500 mt-0.5">
+                            Quyền hiện tại:{" "}
+                            <span
+                              className={`font-semibold ${
+                                member.role === "ADMIN"
+                                  ? "text-blue-600"
+                                  : member.role === "OWNER"
+                                  ? "text-yellow-600"
+                                  : "text-slate-600"
+                              }`}
+                            >
+                              {memberRoleLabel(member.role)}
+                            </span>
                           </div>
                         </div>
-                      </label>
-                    ))}
-                  </div>
+                      </button>
+                    );
+                  })}
 
-                  <div className="mb-4">
-                    <label className="text-slate-300 text-sm mb-1 block">
+                  <div className="h-2 bg-slate-100 mt-2" />
+
+                  <div className="px-5 py-4">
+                    <label className="text-slate-900 font-semibold mb-3 block">
                       Quyền mới
                     </label>
-                    <select
-                      value={selectedRoleValue}
-                      onChange={(e) => setSelectedRoleValue(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-700 text-white border border-slate-600 outline-none"
-                    >
-                      <option value="MEMBER">MEMBER</option>
-                      <option value="ADMIN">ADMIN</option>
-                    </select>
-                  </div>
-                </>
-              )}
 
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  onClick={() => setShowUpdateRoleModal(false)}
-                  className="px-3 py-2 rounded-lg bg-slate-700 text-slate-200"
-                >
-                  Huỷ
-                </button>
-                <button
-                  onClick={handleUpdateRole}
-                  disabled={!selectedRoleUserId}
-                  className="px-3 py-2 rounded-lg bg-violet-500 text-white disabled:opacity-50"
-                >
-                  Cập nhật
-                </button>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedRoleValue("MEMBER")}
+                        className={`p-3 rounded-xl border text-left transition ${
+                          selectedRoleValue === "MEMBER"
+                            ? "bg-blue-50 border-blue-500 text-blue-700"
+                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="font-semibold">Thành viên</div>
+                        <div className="text-xs text-slate-500 mt-1">
+                          Nhắn tin, xem nhóm
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedRoleValue("ADMIN")}
+                        className={`p-3 rounded-xl border text-left transition ${
+                          selectedRoleValue === "ADMIN"
+                            ? "bg-blue-50 border-blue-500 text-blue-700"
+                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="font-semibold">Quản trị viên</div>
+                        <div className="text-xs text-slate-500 mt-1">
+                          Thêm, xoá thành viên
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* FOOTER */}
+            <div className="h-20 px-5 border-t border-slate-200 bg-white flex justify-end items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowUpdateRoleModal(false)}
+                className="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200"
+              >
+                Huỷ
+              </button>
+
+              <button
+                type="button"
+                onClick={handleUpdateRole}
+                disabled={!selectedRoleUserId}
+                className="px-5 py-2.5 rounded-xl bg-blue-500 text-white font-semibold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cập nhật
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(showProfile || showChangePassword) && (
+        <div className="fixed inset-0 flex items-center justify-center z-[999]">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => {
+              setShowProfile(false);
+              setShowChangePassword(false);
+            }}
+          ></div>
+
+          <div className="relative z-[1000] shadow-2xl">
+            {showProfile && (
+              <ProfileModal
+                onClose={() => setShowProfile(false)}
+                refreshUser={fetchUser}
+              />
+            )}
+            {showChangePassword && (
+              <ChangePasswordModal
+                onClose={() => setShowChangePassword(false)}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {incomingCall && callStatus === "RINGING" && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[1500]">
+          <div className="w-[360px] bg-white text-slate-900 rounded-2xl shadow-2xl p-6 text-center">
+            <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center mx-auto text-4xl mb-4">
+              📞
+            </div>
+
+            <h3 className="text-xl font-bold">
+              {incomingCall.callerName || "Ai đó"} đang gọi
+            </h3>
+
+            <p className="text-sm text-slate-500 mt-1">Cuộc gọi thoại đến</p>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={rejectCall}
+                className="flex-1 py-3 rounded-xl bg-red-500 text-white font-semibold hover:bg-red-600"
+              >
+                Từ chối
+              </button>
+
+              <button
+                type="button"
+                onClick={acceptCall}
+                className="flex-1 py-3 rounded-xl bg-green-500 text-white font-semibold hover:bg-green-600"
+              >
+                Nghe máy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <audio ref={remoteAudioRef} autoPlay playsInline />
+      {callStatus !== "IDLE" && callStatus !== "RINGING" && (
+        <div className="fixed inset-0 z-[1500] bg-gradient-to-br from-violet-700 via-purple-700 to-fuchsia-700 flex items-center justify-center">
+          <div className="w-[520px] h-[780px] max-h-[92vh] bg-[#9ca3af] rounded-[24px] shadow-2xl overflow-hidden border border-white/20 flex flex-col">
+            {/* TOP BAR */}
+            <div className="h-[58px] bg-[#f4f4f5] flex items-center justify-between px-5 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 rounded-full bg-red-500"></span>
+                <span className="w-3.5 h-3.5 rounded-full bg-yellow-400"></span>
+                <span className="w-3.5 h-3.5 rounded-full bg-green-500"></span>
+              </div>
+
+              <div className="font-bold text-slate-700 text-[17px]">
+                Zalo Call - {user?.username || "Bạn"}
+              </div>
+
+              <button
+                type="button"
+                onClick={endCall}
+                className="w-8 h-8 rounded-full hover:bg-slate-200 text-slate-500 flex items-center justify-center"
+                title="Đóng"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* BODY */}
+            <div className="relative flex-1 bg-[#9ca3af] flex items-center justify-center">
+              <div className="absolute top-0 left-0 bg-black px-6 py-4 text-emerald-400 font-mono text-[24px] font-bold tracking-wider">
+                {callTimeText}
+              </div>
+
+              <div className="flex flex-col items-center">
+                <div className="w-[190px] h-[190px] rounded-full bg-white/85 border-4 border-white/70 shadow-xl flex items-center justify-center overflow-hidden">
+                  <img
+                    src={resolveAvatar(selectedUser?.avatar)}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = DEFAULT_AVATAR;
+                    }}
+                  />
+                </div>
+
+                <div className="mt-6 text-center">
+                  <div className="text-white text-2xl font-bold drop-shadow">
+                    {selectedUser?.username ||
+                      incomingCall?.callerName ||
+                      "Người dùng"}
+                  </div>
+
+                  <div className="text-white/80 text-sm mt-1">
+                    {callStatus === "CALLING"
+                      ? "Đang gọi..."
+                      : "Đang trong cuộc gọi"}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        )}
 
-        {(showProfile || showChangePassword) && (
-          <div className="fixed inset-0 flex items-center justify-center z-[999]">
-            <div
-              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-              onClick={() => {
-                setShowProfile(false);
-                setShowChangePassword(false);
-              }}
-            ></div>
+            {/* CONTROL BAR */}
+            <div className="h-[96px] bg-black flex items-center justify-center gap-7 shrink-0">
+              <button
+                type="button"
+                onClick={toggleCameraPlaceholder}
+                className="h-14 px-6 rounded-full border border-white/15 bg-white/5 hover:bg-white/10 text-white flex items-center gap-4 transition"
+                title="Mở camera"
+              >
+                <span className="text-2xl">🎥</span>
+                <span className="text-white/70 text-xl">⌃</span>
+              </button>
 
-            <div className="relative z-[1000] shadow-2xl">
-              {showProfile && (
-                <ProfileModal
-                  onClose={() => setShowProfile(false)}
-                  refreshUser={fetchUser}
-                />
-              )}
-              {showChangePassword && (
-                <ChangePasswordModal
-                  onClose={() => setShowChangePassword(false)}
-                />
-              )}
+              <button
+                type="button"
+                onClick={endCall}
+                className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center text-3xl shadow-lg transition"
+                title="Kết thúc cuộc gọi"
+              >
+                📞
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleMic}
+                className={`h-14 px-6 rounded-full border flex items-center gap-4 transition ${
+                  isMicMuted
+                    ? "bg-red-500/20 border-red-400 text-red-300"
+                    : "bg-white/5 border-white/15 text-white hover:bg-white/10"
+                }`}
+                title={isMicMuted ? "Bật micro" : "Tắt micro"}
+              >
+                <span className="text-3xl">{isMicMuted ? "🔇" : "🎙️"}</span>
+                <span className="text-white/70 text-xl">⌃</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => toast.info("Cài đặt cuộc gọi sẽ làm sau")}
+                className="w-14 h-14 rounded-full hover:bg-white/10 text-white flex items-center justify-center text-3xl transition"
+                title="Cài đặt"
+              >
+                ⚙️
+              </button>
             </div>
           </div>
-        )}
-      </div>
-    );
-  }
+        </div>
+      )}
+    </div>
+  );
+}
 
-  export default ChatPage;
+export default ChatPage;

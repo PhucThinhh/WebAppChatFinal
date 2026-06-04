@@ -79,4 +79,15 @@ public class FriendshipController {
 
         return service.searchUsers(keyword, userId);
     }
+
+    // 🗑️ XOÁ BẠN BÈ
+    @DeleteMapping("/{friendId}")
+    public String removeFriend(@PathVariable Long friendId) {
+
+        Long userId = getCurrentUserId();
+
+        service.removeFriend(userId, friendId);
+
+        return "Đã xoá bạn bè";
+    }
 }

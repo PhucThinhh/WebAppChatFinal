@@ -22,14 +22,13 @@ export default function CreateGroup({ onCreated }) {
       const meRes = await axiosClient.get("/user/me");
       const me = meRes.data;
       setCurrentUser(me);
-      console.log("CURRENT USER:", me);
 
       const friendRes = await axiosClient.get("/friends");
       const list = Array.isArray(friendRes.data) ? friendRes.data : [];
       setFriends(list);
-      console.log("DANH SACH BAN BE JSON:", JSON.stringify(list, null, 2));
     } catch (error) {
       console.error("LỖI INIT:", error.response?.data || error.message);
+      toast.error("Không tải được dữ liệu tạo nhóm");
     }
   };
 
@@ -48,19 +47,11 @@ export default function CreateGroup({ onCreated }) {
         ? Number(friend.receiverId)
         : NaN;
 
-    // friendship object
     if (!Number.isNaN(senderId) && !Number.isNaN(receiverId)) {
       return senderId === myId ? receiverId : senderId;
     }
 
-    // user-like object
-    const directId = Number(
-      friend?.userId ??
-        friend?.friendId ??
-        friend?.id
-    );
-
-    return directId;
+    return Number(friend?.userId ?? friend?.friendId ?? friend?.id);
   };
 
   const getFriendLabel = (friend, meId) => {
@@ -105,22 +96,17 @@ export default function CreateGroup({ onCreated }) {
       const token = localStorage.getItem("token");
 
       if (!token) {
-        alert("Không tìm thấy token, vui lòng đăng nhập lại");
-        return;
-      }
-
-      if (!groupName.trim()) {
-        alert("Vui lòng nhập tên nhóm");
+        toast.error("Không tìm thấy token, vui lòng đăng nhập lại");
         return;
       }
 
       if (selectedFriends.length < 2) {
-        alert("Vui lòng chọn ít nhất 2 thành viên");
+        toast.error("Vui lòng chọn ít nhất 2 thành viên");
         return;
       }
 
       if (!currentUser?.id) {
-        alert("Không tìm thấy thông tin người dùng");
+        toast.error("Không tìm thấy thông tin người dùng");
         return;
       }
 
@@ -132,24 +118,20 @@ export default function CreateGroup({ onCreated }) {
           (id) => !Number.isNaN(id) && id > 0 && id !== Number(currentUser.id)
         );
 
-      if (!memberIds.length) {
-        console.log("selectedFriends JSON:", JSON.stringify(selectedFriends, null, 2));
-        alert("Không đọc được id thành viên");
+      if (memberIds.length < 2) {
+        toast.error("Vui lòng chọn ít nhất 2 thành viên hợp lệ");
         return;
       }
 
       const payload = {
+        // Được phép rỗng. Backend sẽ tự đặt tên theo các thành viên.
         name: groupName.trim(),
         creatorId: Number(currentUser.id),
         memberIds,
       };
 
-      console.log("PAYLOAD TẠO NHÓM JSON:", JSON.stringify(payload, null, 2));
-      console.log("selectedFriends JSON:", JSON.stringify(selectedFriends, null, 2));
-
       const res = await createGroupApi(payload);
 
-      console.log("TẠO NHÓM THÀNH CÔNG:", res.data);
       toast.success("Tạo nhóm thành công! 🎉");
 
       setGroupName("");
@@ -158,9 +140,13 @@ export default function CreateGroup({ onCreated }) {
       if (onCreated) onCreated(res.data);
     } catch (error) {
       console.error("LỖI TẠO NHÓM STATUS:", error.response?.status);
-      console.error("LỖI TẠO NHÓM DATA JSON:", JSON.stringify(error.response?.data, null, 2));
+      console.error(
+        "LỖI TẠO NHÓM DATA JSON:",
+        JSON.stringify(error.response?.data, null, 2)
+      );
       console.error("LỖI TẠO NHÓM FULL:", error);
-      alert("Tạo nhóm thất bại");
+
+      toast.error(error.response?.data || "Tạo nhóm thất bại");
     } finally {
       setLoading(false);
     }
@@ -179,7 +165,7 @@ export default function CreateGroup({ onCreated }) {
       <div style={{ marginBottom: "10px" }}>
         <input
           type="text"
-          placeholder="Tên nhóm"
+          placeholder="Tên nhóm (có thể bỏ trống)"
           value={groupName}
           onChange={(e) => setGroupName(e.target.value)}
           style={{
@@ -235,6 +221,7 @@ export default function CreateGroup({ onCreated }) {
                   checked={checked}
                   onChange={() => toggleSelectFriend(friend)}
                 />
+
                 <img
                   src={resolveAvatar(friend?.avatar)}
                   alt={getFriendLabel(friend, meId)}
@@ -250,6 +237,7 @@ export default function CreateGroup({ onCreated }) {
                     border: "1px solid rgba(255,255,255,0.2)",
                   }}
                 />
+
                 <span>{getFriendLabel(friend, meId)}</span>
               </label>
             );

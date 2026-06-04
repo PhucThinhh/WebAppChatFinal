@@ -16,6 +16,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -36,35 +37,41 @@ public class GroupService {
     private final MessageRepository messageRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
+    private static final String DEFAULT_GROUP_AVATAR =
+            "https://s3-dyamodb-cloudfront.s3.ap-southeast-1.amazonaws.com/uploads/d5fe980e-ba1d-4219-bd58-bef84289a982_avatar.jpg";
+
     public Group createGroup(CreateGroupDTO dto) {
 
-        // 🔥 CHECK MIN 3 NGƯỜI (creator + 2 member)
         if (dto.getMemberIds() == null || dto.getMemberIds().size() < 2) {
             throw new RuntimeException("Nhóm phải có ít nhất 3 thành viên");
         }
 
-        // 1. tạo group
+        String groupName = dto.getName();
+
+        if (groupName == null || groupName.isBlank()) {
+            groupName = buildDefaultGroupName(dto.getCreatorId(), dto.getMemberIds());
+        }
+
         Group group = groupRepo.save(
                 Group.builder()
-                        .name(dto.getName())
+                        .name(groupName)
                         .createdBy(dto.getCreatorId())
                         .createdAt(LocalDateTime.now())
+                        .avatar(DEFAULT_GROUP_AVATAR)
                         .build()
         );
 
-        // 🔥 DEBUG QUAN TRỌNG
         if (group.getId() == null) {
             throw new RuntimeException("Group ID null - Mongo chưa generate");
         }
 
-        // 2. thêm creator (OWNER)
         memberRepo.save(GroupMember.builder()
                 .groupId(group.getId())
                 .userId(dto.getCreatorId())
                 .role(GroupRole.OWNER)
+                .removed(false)
                 .build());
 
-        // 3. thêm member
         for (Long id : dto.getMemberIds()) {
 
             if (id.equals(dto.getCreatorId())) continue;
@@ -73,6 +80,7 @@ public class GroupService {
                     .groupId(group.getId())
                     .userId(id)
                     .role(GroupRole.MEMBER)
+                    .removed(false)
                     .build());
 
             publishGroupSystemMessage(
@@ -89,6 +97,7 @@ public class GroupService {
         Set<Long> changedUsers = new HashSet<>();
         changedUsers.add(dto.getCreatorId());
         changedUsers.addAll(dto.getMemberIds());
+
         notifyGroupChanged(changedUsers, "GROUP_CREATED", group.getId());
 
         return group;
@@ -96,37 +105,54 @@ public class GroupService {
 
     public List<Group> getGroupsByUser(Long userId) {
 
-        // 1. lấy danh sách membership
+        /*
+         * GIỮ NGUYÊN findByUserId:
+         * - User bị kick vẫn còn record GroupMember removed = true
+         * - Nhờ vậy vẫn thấy boxchat cũ
+         */
         List<GroupMember> members = memberRepo.findByUserId(userId);
 
-        // 2. lấy danh sách groupId
         List<String> groupIds = members.stream()
                 .map(GroupMember::getGroupId)
+                .filter(Objects::nonNull)
+                .distinct()
                 .toList();
 
-        // 3. lấy group từ DB
         return groupRepo.findAllById(groupIds);
     }
 
     public void addMember(String groupId, Long userId, Long currentUserId) {
 
         GroupMember me = memberRepo
-                .findByGroupIdAndUserId(groupId, currentUserId)
+                .findByGroupIdAndUserIdAndRemovedFalse(groupId, currentUserId)
                 .orElseThrow(() -> new RuntimeException("Không thuộc nhóm"));
 
         if (me.getRole() != GroupRole.ADMIN && me.getRole() != GroupRole.OWNER) {
             throw new RuntimeException("Không có quyền");
         }
 
-        if (memberRepo.existsByGroupIdAndUserId(groupId, userId)) {
+        GroupMember oldMember = memberRepo
+                .findByGroupIdAndUserId(groupId, userId)
+                .orElse(null);
+
+        if (oldMember != null && Boolean.FALSE.equals(oldMember.getRemoved())) {
             throw new RuntimeException("User đã trong nhóm");
         }
 
-        memberRepo.save(GroupMember.builder()
-                .groupId(groupId)
-                .userId(userId)
-                .role(GroupRole.MEMBER)
-                .build());
+        if (oldMember != null && Boolean.TRUE.equals(oldMember.getRemoved())) {
+            oldMember.setRemoved(false);
+            oldMember.setRemovedAt(null);
+            oldMember.setRemovedBy(null);
+            oldMember.setRole(GroupRole.MEMBER);
+            memberRepo.save(oldMember);
+        } else {
+            memberRepo.save(GroupMember.builder()
+                    .groupId(groupId)
+                    .userId(userId)
+                    .role(GroupRole.MEMBER)
+                    .removed(false)
+                    .build());
+        }
 
         publishGroupSystemMessage(
                 groupId,
@@ -138,7 +164,12 @@ public class GroupService {
 
     public List<GroupMemberDTO> getMembers(String groupId) {
 
-        List<GroupMember> members = memberRepo.findByGroupId(groupId);
+        /*
+         * Chỉ trả về thành viên còn trong nhóm.
+         * Người removed = true không còn hiện trong danh sách thành viên.
+         */
+        List<GroupMember> members = memberRepo.findByGroupIdAndRemovedFalse(groupId);
+
         if (members.isEmpty()) {
             return List.of();
         }
@@ -167,27 +198,39 @@ public class GroupService {
 
     public void removeMember(String groupId, Long targetUserId, Long currentUserId) {
 
-        // 🔥 check người thực hiện có phải ADMIN không
-        GroupMember me = memberRepo.findByGroupIdAndUserId(groupId, currentUserId)
+        GroupMember me = memberRepo.findByGroupIdAndUserIdAndRemovedFalse(groupId, currentUserId)
                 .orElseThrow(() -> new RuntimeException("Bạn không thuộc nhóm"));
 
         if (me.getRole() != GroupRole.ADMIN && me.getRole() != GroupRole.OWNER) {
             throw new RuntimeException("Bạn không có quyền");
         }
 
-        // ❌ không cho tự xóa chính mình (optional)
         if (currentUserId.equals(targetUserId)) {
             throw new RuntimeException("Không thể tự xoá chính mình");
         }
 
-        // 🔥 check user tồn tại trong group
-        GroupMember target = memberRepo.findByGroupIdAndUserId(groupId, targetUserId)
+        GroupMember target = memberRepo.findByGroupIdAndUserIdAndRemovedFalse(groupId, targetUserId)
                 .orElseThrow(() -> new RuntimeException("User không trong nhóm"));
+
+        if (target.getRole() == GroupRole.OWNER) {
+            throw new RuntimeException("Không thể xoá chủ nhóm");
+        }
+
+        if (me.getRole() == GroupRole.ADMIN && target.getRole() == GroupRole.ADMIN) {
+            throw new RuntimeException("Quản trị viên không thể xoá quản trị viên khác");
+        }
 
         String targetName = getDisplayName(targetUserId);
         String actorName = getDisplayName(currentUserId);
 
-        memberRepo.deleteByGroupIdAndUserId(groupId, targetUserId);
+        /*
+         * Không xoá record nữa.
+         * Chỉ đánh dấu removed = true để người bị kick vẫn giữ lịch sử chat.
+         */
+        target.setRemoved(true);
+        target.setRemovedAt(LocalDateTime.now());
+        target.setRemovedBy(currentUserId);
+        memberRepo.save(target);
 
         publishGroupSystemMessage(
                 groupId,
@@ -199,24 +242,28 @@ public class GroupService {
 
     public void deleteGroup(String groupId, Long currentUserId) {
 
-        // 🔥 check membership
-        GroupMember me = memberRepo.findByGroupIdAndUserId(groupId, currentUserId)
+        /*
+         * Giải tán nhóm:
+         * - Chỉ OWNER còn active mới được giải tán.
+         * - Khi giải tán thì xoá tất cả member records, kể cả removed = true.
+         * - Như vậy boxchat sẽ mất với tất cả người dùng.
+         */
+        GroupMember me = memberRepo.findByGroupIdAndUserIdAndRemovedFalse(groupId, currentUserId)
                 .orElseThrow(() -> new RuntimeException("Bạn không thuộc nhóm"));
 
-        // 🔥 chỉ OWNER mới được xoá
         if (me.getRole() != GroupRole.OWNER) {
             throw new RuntimeException("Chỉ chủ nhóm mới được giải tán");
         }
 
-        // 🔥 xoá member
         List<GroupMember> members = memberRepo.findByGroupId(groupId);
+
         Set<Long> notifyUsers = members.stream()
                 .map(GroupMember::getUserId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
+
         memberRepo.deleteAll(members);
 
-        // 🔥 xoá group
         groupRepo.deleteById(groupId);
 
         notifyGroupChanged(notifyUsers, "GROUP_DELETED", groupId);
@@ -224,15 +271,19 @@ public class GroupService {
 
     public void updateRole(String groupId, Long targetUserId, GroupRole newRole, Long currentUserId) {
 
-        GroupMember me = memberRepo.findByGroupIdAndUserId(groupId, currentUserId)
+        /*
+         * SỬA Ở ĐÂY:
+         * Người đã bị kick không được cập nhật quyền.
+         */
+        GroupMember me = memberRepo.findByGroupIdAndUserIdAndRemovedFalse(groupId, currentUserId)
                 .orElseThrow(() -> new RuntimeException("Không thuộc nhóm"));
 
         if (me.getRole() != GroupRole.OWNER) {
             throw new RuntimeException("Không có quyền");
         }
 
-        GroupMember target = memberRepo.findByGroupIdAndUserId(groupId, targetUserId)
-                .orElseThrow(() -> new RuntimeException("User không tồn tại"));
+        GroupMember target = memberRepo.findByGroupIdAndUserIdAndRemovedFalse(groupId, targetUserId)
+                .orElseThrow(() -> new RuntimeException("User không tồn tại hoặc đã bị xoá khỏi nhóm"));
 
         if (target.getRole() == GroupRole.OWNER) {
             throw new RuntimeException("Không thể sửa OWNER");
@@ -242,62 +293,216 @@ public class GroupService {
         memberRepo.save(target);
     }
 
+    public Group updateGroupAvatar(String groupId, String avatarUrl, Long currentUserId) {
+
+        if (groupId == null || groupId.isBlank()) {
+            throw new RuntimeException("GroupId không hợp lệ");
+        }
+
+        if (avatarUrl == null || avatarUrl.isBlank()) {
+            throw new RuntimeException("Avatar không hợp lệ");
+        }
+
+        Group group = groupRepo.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Group không tồn tại"));
+
+        /*
+         * SỬA Ở ĐÂY:
+         * Người đã bị kick không được đổi avatar nhóm.
+         */
+        GroupMember me = memberRepo.findByGroupIdAndUserIdAndRemovedFalse(groupId, currentUserId)
+                .orElseThrow(() -> new RuntimeException("Bạn không thuộc nhóm"));
+
+        if (me.getRole() != GroupRole.ADMIN && me.getRole() != GroupRole.OWNER) {
+            throw new RuntimeException("Bạn không có quyền đổi ảnh nhóm");
+        }
+
+        group.setAvatar(avatarUrl);
+
+        Group saved = groupRepo.save(group);
+
+        publishGroupSystemMessage(
+                groupId,
+                getDisplayName(currentUserId) + " đã đổi ảnh đại diện nhóm"
+        );
+
+        /*
+         * Chỉ notify thành viên còn active.
+         * Người đã bị kick chỉ giữ lịch sử tới lúc bị kick.
+         */
+        List<GroupMember> members = memberRepo.findByGroupIdAndRemovedFalse(groupId);
+
+        Set<Long> notifyUsers = members.stream()
+                .map(GroupMember::getUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        notifyGroupAvatarChanged(notifyUsers, groupId, avatarUrl);
+
+        return saved;
+    }
+
+    public Group updateGroupName(String groupId, String newName, Long currentUserId) {
+
+        if (groupId == null || groupId.isBlank()) {
+            throw new RuntimeException("GroupId không hợp lệ");
+        }
+
+        if (newName == null || newName.isBlank()) {
+            throw new RuntimeException("Tên nhóm không được để trống");
+        }
+
+        Group group = groupRepo.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Group không tồn tại"));
+
+        /*
+         * SỬA Ở ĐÂY:
+         * Người đã bị kick không được đổi tên nhóm.
+         */
+        GroupMember me = memberRepo.findByGroupIdAndUserIdAndRemovedFalse(groupId, currentUserId)
+                .orElseThrow(() -> new RuntimeException("Bạn không thuộc nhóm"));
+
+        if (me.getRole() != GroupRole.ADMIN && me.getRole() != GroupRole.OWNER) {
+            throw new RuntimeException("Bạn không có quyền đổi tên nhóm");
+        }
+
+        String oldName = group.getName();
+
+        group.setName(newName.trim());
+
+        Group saved = groupRepo.save(group);
+
+        publishGroupSystemMessage(
+                groupId,
+                getDisplayName(currentUserId)
+                        + " đã đổi tên nhóm từ \""
+                        + oldName
+                        + "\" thành \""
+                        + saved.getName()
+                        + "\""
+        );
+
+        /*
+         * Chỉ notify thành viên còn active.
+         */
+        List<GroupMember> members = memberRepo.findByGroupIdAndRemovedFalse(groupId);
+
+        Set<Long> notifyUsers = members.stream()
+                .map(GroupMember::getUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        notifyGroupNameChanged(notifyUsers, groupId, saved.getName());
+
+        return saved;
+    }
+
     public void leaveGroup(String groupId, Long userId) {
 
-        GroupMember me = memberRepo.findByGroupIdAndUserId(groupId, userId)
+        /*
+         * Người đã removed không thể rời nhóm lần nữa.
+         */
+        GroupMember me = memberRepo.findByGroupIdAndUserIdAndRemovedFalse(groupId, userId)
                 .orElseThrow(() -> new RuntimeException("Không thuộc nhóm"));
 
-        // 🔥 nếu là OWNER
         if (me.getRole() == GroupRole.OWNER) {
 
-            List<GroupMember> members = memberRepo.findByGroupId(groupId);
+            /*
+             * Chỉ tính thành viên còn active khi chuyển quyền.
+             */
+            List<GroupMember> members = memberRepo.findByGroupIdAndRemovedFalse(groupId);
 
-            // ❗ chỉ còn 1 người → xoá nhóm
             if (members.size() <= 1) {
-                Set<Long> notifyUsers = members.stream()
+                /*
+                 * Nếu chỉ còn OWNER active, giải tán luôn group.
+                 * Nhưng vẫn xoá toàn bộ record kể cả removed để boxchat mất khỏi tất cả.
+                 */
+                List<GroupMember> allMembers = memberRepo.findByGroupId(groupId);
+
+                Set<Long> notifyUsers = allMembers.stream()
                         .map(GroupMember::getUserId)
                         .filter(Objects::nonNull)
                         .collect(Collectors.toSet());
-                memberRepo.deleteAll(members);
+
+                memberRepo.deleteAll(allMembers);
                 groupRepo.deleteById(groupId);
+
                 notifyGroupChanged(notifyUsers, "GROUP_DELETED", groupId);
                 return;
             }
 
-            // 🔥 loại bỏ chính mình
             List<GroupMember> others = members.stream()
                     .filter(m -> !m.getUserId().equals(userId))
                     .toList();
 
             GroupMember newOwner;
 
-            // ✅ ƯU TIÊN ADMIN
             List<GroupMember> admins = others.stream()
                     .filter(m -> m.getRole() == GroupRole.ADMIN)
                     .toList();
 
             if (!admins.isEmpty()) {
-                // 👉 chọn random admin
                 newOwner = admins.get(new Random().nextInt(admins.size()));
             } else {
-                // 👉 không có admin → chọn random member
                 newOwner = others.get(new Random().nextInt(others.size()));
             }
 
-            // 🔥 set OWNER mới
             newOwner.setRole(GroupRole.OWNER);
             memberRepo.save(newOwner);
         }
 
-        // 🔥 xoá user khỏi group
-        memberRepo.deleteByGroupIdAndUserId(groupId, userId);
+        /*
+         * Rời nhóm cũng giữ lịch sử chat.
+         * Nếu bạn muốn rời nhóm là mất boxchat, đổi lại thành deleteByGroupIdAndUserId.
+         */
+        me.setRemoved(true);
+        me.setRemovedAt(LocalDateTime.now());
+        me.setRemovedBy(userId);
+        memberRepo.save(me);
+
         publishGroupSystemMessage(
                 groupId,
                 getDisplayName(userId) + " đã rời nhóm"
         );
+
         notifyGroupChanged(Set.of(userId), "GROUP_MEMBER_REMOVED", groupId);
     }
 
+    private String buildDefaultGroupName(Long creatorId, List<Long> memberIds) {
+
+        List<Long> allIds = new ArrayList<>();
+
+        if (creatorId != null) {
+            allIds.add(creatorId);
+        }
+
+        if (memberIds != null) {
+            memberIds.stream()
+                    .filter(Objects::nonNull)
+                    .filter(id -> !allIds.contains(id))
+                    .forEach(allIds::add);
+        }
+
+        if (allIds.isEmpty()) {
+            return "Nhóm mới";
+        }
+
+        List<User> users = userRepository.findAllById(allIds);
+
+        Map<Long, String> nameById = users.stream()
+                .collect(Collectors.toMap(
+                        User::getId,
+                        user -> user.getUsername() != null && !user.getUsername().isBlank()
+                                ? user.getUsername()
+                                : "User " + user.getId()
+                ));
+
+        String name = allIds.stream()
+                .map(id -> nameById.getOrDefault(id, "User " + id))
+                .collect(Collectors.joining(", "));
+
+        return name.isBlank() ? "Nhóm mới" : name;
+    }
 
     private void notifyGroupChanged(Set<Long> userIds, String action, String groupId) {
         if (userIds == null || userIds.isEmpty()) return;
@@ -317,8 +522,47 @@ public class GroupService {
                 );
     }
 
+    private void notifyGroupAvatarChanged(Set<Long> userIds, String groupId, String avatar) {
+        if (userIds == null || userIds.isEmpty()) return;
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("action", "GROUP_AVATAR_UPDATED");
+        payload.put("groupId", groupId);
+        payload.put("avatar", avatar);
+        payload.put("timestamp", System.currentTimeMillis());
+
+        userIds.stream()
+                .filter(Objects::nonNull)
+                .forEach(uid ->
+                        messagingTemplate.convertAndSend(
+                                "/topic/group-updates/" + uid,
+                                payload
+                        )
+                );
+    }
+
+    private void notifyGroupNameChanged(Set<Long> userIds, String groupId, String groupName) {
+        if (userIds == null || userIds.isEmpty()) return;
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("action", "GROUP_NAME_UPDATED");
+        payload.put("groupId", groupId);
+        payload.put("groupName", groupName);
+        payload.put("timestamp", System.currentTimeMillis());
+
+        userIds.stream()
+                .filter(Objects::nonNull)
+                .forEach(uid ->
+                        messagingTemplate.convertAndSend(
+                                "/topic/group-updates/" + uid,
+                                payload
+                        )
+                );
+    }
+
     private String getDisplayName(Long userId) {
         if (userId == null) return "Người dùng";
+
         return userRepository.findById(userId)
                 .map(User::getUsername)
                 .filter(name -> name != null && !name.isBlank())
@@ -337,7 +581,10 @@ public class GroupService {
                 .build();
 
         Message saved = messageRepository.save(systemMsg);
-        messagingTemplate.convertAndSend("/topic/chat/group_" + groupId, saved);
-    }
 
+        messagingTemplate.convertAndSend(
+                "/topic/chat/group_" + groupId,
+                saved
+        );
+    }
 }

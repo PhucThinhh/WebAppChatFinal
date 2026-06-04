@@ -124,6 +124,10 @@ public class UserController {
                     .body(Map.of("message", e.getMessage()));
         }
     }
+    @GetMapping("/{id}")
+    public UserResponse getUserInfo(@PathVariable Long id) {
+        return userService.getUserInfo(id);
+    }
 
 
 }

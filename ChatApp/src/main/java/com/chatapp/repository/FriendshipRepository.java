@@ -20,33 +20,51 @@ public interface FriendshipRepository extends JpaRepository<Friendship, Long> {
         OR
         (f.senderId = :b AND f.receiverId = :a)
     """)
-    Optional<Friendship> findRelation(Long a, Long b);
+    Optional<Friendship> findRelation(
+            @Param("a") Long a,
+            @Param("b") Long b
+    );
 
     @Query("""
         SELECT f FROM Friendship f
         WHERE (f.senderId = :userId OR f.receiverId = :userId)
         AND f.status = 'ACCEPTED'
     """)
-    List<Friendship> findFriends(Long userId);
+    List<Friendship> findFriends(@Param("userId") Long userId);
 
     @Query("""
         SELECT f FROM Friendship f
         WHERE f.receiverId = :userId
         AND f.status = 'PENDING'
     """)
-    List<Friendship> findRequests(Long userId);
+    List<Friendship> findRequests(@Param("userId") Long userId);
 
     @Query("""
-    SELECT u FROM User u
-    WHERE (
-        LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
-        OR u.phone LIKE CONCAT('%', :keyword, '%')
-    )
-    AND u.id <> :currentUserId
-""")
+        SELECT u FROM User u
+        WHERE (
+            LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            OR u.phone LIKE CONCAT('%', :keyword, '%')
+        )
+        AND u.id <> :currentUserId
+    """)
     List<User> searchUsers(
             @Param("keyword") String keyword,
             @Param("currentUserId") Long currentUserId
     );
 
+    // 🗑️ TÌM QUAN HỆ BẠN BÈ ĐÃ ACCEPT ĐỂ XOÁ
+    @Query("""
+        SELECT f FROM Friendship f
+        WHERE 
+        (
+            (f.senderId = :userId AND f.receiverId = :friendId)
+            OR
+            (f.senderId = :friendId AND f.receiverId = :userId)
+        )
+        AND f.status = 'ACCEPTED'
+    """)
+    Optional<Friendship> findAcceptedFriendship(
+            @Param("userId") Long userId,
+            @Param("friendId") Long friendId
+    );
 }

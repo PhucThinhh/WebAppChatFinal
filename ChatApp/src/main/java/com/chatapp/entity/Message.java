@@ -1,10 +1,10 @@
 package com.chatapp.entity;
 
-import jakarta.persistence.Id;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
@@ -26,7 +26,7 @@ public class Message {
 
     private String content;
 
-    // TEXT | IMAGE | FILE | EMOJI
+    // TEXT | IMAGE | FILE | EMOJI | SYSTEM | FORWARD
     private String type;
 
     private String fileUrl;
@@ -47,6 +47,17 @@ public class Message {
     private String originalContent;
 
     private String originalMessageId;
+    private String pollId;
 
 
+    // =========================
+    // PIN MESSAGE
+    // =========================
+
+    @Builder.Default
+    private Boolean pinned = false;
+
+    private Long pinnedBy;
+
+    private LocalDateTime pinnedAt;
 }

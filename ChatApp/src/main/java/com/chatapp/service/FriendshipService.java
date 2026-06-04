@@ -130,4 +130,13 @@ public class FriendshipService {
                 })
                 .toList();
     }
+
+    public void removeFriend(Long userId, Long friendId) {
+
+        Friendship friendship = repo
+                .findAcceptedFriendship(userId, friendId)
+                .orElseThrow(() -> new RuntimeException("Hai người chưa phải bạn bè"));
+
+        repo.delete(friendship);
+    }
 }

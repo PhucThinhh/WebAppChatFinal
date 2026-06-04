@@ -84,16 +84,7 @@ function Sidebar({
         </div>
 
         {/* SEARCH FRIENDS 🔥 NEW */}
-        <div
-          onClick={() => onSelectTab("search")}
-          className={`p-3 rounded-2xl cursor-pointer transition ${
-            activeTab === "search"
-              ? "bg-blue-500/20 text-blue-400"
-              : "text-slate-500 hover:text-white"
-          }`}
-        >
-          <Search size={24} />
-        </div>
+        
       </div>
 
       {/* SETTINGS */}

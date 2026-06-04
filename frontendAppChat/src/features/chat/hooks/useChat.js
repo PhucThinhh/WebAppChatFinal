@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 
 function useChat() {
   const [messages, setMessages] = useState([]);
@@ -18,12 +18,15 @@ function useChat() {
     setMessages(list);
   };
 
-  // ================= DELETE MESSAGE (🔥 QUAN TRỌNG) =================
+  // ================= DELETE MESSAGE =================
   const deleteMessage = (messageId, userId) => {
     setMessages((prev) =>
       prev.map((m) =>
-        getId(m) === messageId
-          ? { ...m, deletedBy: userId } // 👈 gắn người xoá
+        String(getId(m)) === String(messageId)
+          ? {
+              ...m,
+              deletedBy: userId,
+            }
           : m
       )
     );
@@ -43,17 +46,12 @@ function useChat() {
     setInput("");
   };
 
-  // ================= AUTO SCROLL =================
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
   return {
     messages,
     setMessages,
     addMessage,
     replaceMessages,
-    deleteMessage, // 👈 thêm cái này
+    deleteMessage,
     input,
     setInput,
     sendMessageLocal,

@@ -90,3 +90,124 @@ export const leaveGroupApi = (groupId, userId) => {
     `/chat/group/leave?groupId=${groupId}&userId=${userId}`
   );
 };
+
+export const markAsReadApi = (roomId) => {
+  return axiosClient.post(`/chat/read/${roomId}`);
+};
+
+export const getUnreadCountApi = (roomId) => {
+  return axiosClient.get(`/chat/unread/${roomId}`);
+};
+
+export const getPrivateConversationsApi = () => {
+  return axiosClient.get(`/chat/private-conversations`);
+};
+export const updateGroupAvatarApi = (groupId, avatar, currentUserId) => {
+  return axiosClient.put(
+    `/chat/group/avatar?groupId=${groupId}&avatar=${encodeURIComponent(
+      avatar
+    )}&currentUserId=${currentUserId}`
+  );
+};
+export const updateGroupNameApi = (groupId, name, currentUserId) => {
+  return axiosClient.put(
+    `/chat/group/name?groupId=${groupId}&name=${encodeURIComponent(
+      name
+    )}&currentUserId=${currentUserId}`
+  );
+};
+
+export const updateChatBackgroundApi = (
+  roomId,
+  background,
+  scope = "PERSONAL"
+) => {
+  return axiosClient.put(`/chat/background/${roomId}`, null, {
+    params: {
+      background,
+      scope,
+    },
+  });
+};
+
+export const getChatBackgroundApi = (roomId) => {
+  return axiosClient.get(`/chat/background/${roomId}`);
+};
+
+// 🔥 THẢ CẢM XÚC TIN NHẮN
+export const reactMessageApi = (messageId, emoji) => {
+  return axiosClient.post(`/chat/message/${messageId}/reaction`, null, {
+    params: {
+      emoji,
+    },
+  });
+};
+
+export const clearMessageReactionsApi = (messageId) => {
+  return axiosClient.delete(`/chat/message/${messageId}/reaction`);
+};
+
+// =========================
+// ĐỔI BIỆT DANH CHAT ĐƠN
+// =========================
+export const updateNicknameApi = (roomId, targetUserId, nickname) => {
+  return axiosClient.post(`/chat/nickname/update`, {
+    roomId,
+    targetUserId,
+    nickname,
+  });
+};
+
+// =========================
+// LẤY BIỆT DANH CHAT ĐƠN
+// =========================
+export const getNicknameApi = (roomId, targetUserId) => {
+  return axiosClient.get(`/chat/nickname`, {
+    params: {
+      roomId,
+      targetUserId,
+    },
+  });
+};
+
+// =========================
+// PIN MESSAGE
+// =========================
+export const pinMessageApi = (messageId) => {
+  return axiosClient.put(`/chat/message/${messageId}/pin`);
+};
+
+export const unpinMessageApi = (messageId) => {
+  return axiosClient.put(`/chat/message/${messageId}/unpin`);
+};
+
+export const getPinnedMessagesApi = (roomId) => {
+  return axiosClient.get(`/chat/pinned/${roomId}`);
+};
+
+// =========================
+// POLL / BÌNH CHỌN
+// =========================
+export const createPollApi = (data) => {
+  return axiosClient.post("/chat/polls", data);
+};
+
+export const getPollApi = (pollId) => {
+  return axiosClient.get(`/chat/polls/${pollId}`);
+};
+
+export const votePollApi = (pollId, optionIds) => {
+  return axiosClient.post(`/chat/polls/${pollId}/vote`, {
+    optionIds,
+  });
+};
+
+export const addPollOptionApi = (pollId, text) => {
+  return axiosClient.post(`/chat/polls/${pollId}/options`, {
+    text,
+  });
+};
+
+export const closePollApi = (pollId) => {
+  return axiosClient.put(`/chat/polls/${pollId}/close`);
+};

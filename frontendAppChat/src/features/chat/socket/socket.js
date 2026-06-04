@@ -3,6 +3,7 @@ import SockJS from "sockjs-client";
 
 let stompClient = null;
 let connectionState = "DISCONNECTED";
+let connectedUserId = null;
 
 let activeRooms = {};
 let pendingRooms = {};
@@ -18,9 +19,19 @@ window.addEventListener("storage", (event) => {
 // ================= CONNECT =================
 export const connectSocket = (userId, onReady) => {
   const token = localStorage.getItem("token");
-  if (!token) return;
+  if (!token || !userId) return;
 
-  if (stompClient) return;
+  // Nếu đã connect đúng user rồi thì không tạo lại
+  if (stompClient && String(connectedUserId) === String(userId)) {
+    return;
+  }
+
+  // Nếu socket cũ là user khác thì ngắt trước
+  if (stompClient && String(connectedUserId) !== String(userId)) {
+    disconnectSocket();
+  }
+
+  connectedUserId = userId;
 
   stompClient = new Client({
     webSocketFactory: () =>
@@ -31,7 +42,7 @@ export const connectSocket = (userId, onReady) => {
     debug: (str) => console.log("STOMP:", str),
 
     onConnect: () => {
-      console.log("✅ SOCKET CONNECTED");
+      console.log("✅ SOCKET CONNECTED:", userId);
 
       connectionState = "CONNECTED";
 
@@ -41,13 +52,26 @@ export const connectSocket = (userId, onReady) => {
           roomId,
           cb.callback,
           cb.deleteCallback,
-          cb.recallCallback
+          cb.recallCallback,
+          cb.backgroundCallback,
+          cb.reactionCallback,
+          cb.pinCallback,
+          cb.pollCallback
         );
       });
 
       // restore pending rooms
       Object.entries(pendingRooms).forEach(([roomId, cb]) => {
-        internalJoinRoom(roomId, cb.onMessage, cb.onDelete, cb.onRecall);
+        internalJoinRoom(
+          roomId,
+          cb.onMessage,
+          cb.onDelete,
+          cb.onRecall,
+          cb.onBackground,
+          cb.onReaction,
+          cb.onPin,
+          cb.onPoll
+        );
       });
 
       pendingRooms = {};
@@ -57,6 +81,11 @@ export const connectSocket = (userId, onReady) => {
 
     onStompError: (frame) => {
       console.error("❌ STOMP ERROR:", frame);
+    },
+
+    onWebSocketClose: () => {
+      console.log("🔌 SOCKET CLOSED");
+      connectionState = "DISCONNECTED";
     },
 
     onDisconnect: () => {
@@ -69,14 +98,29 @@ export const connectSocket = (userId, onReady) => {
 };
 
 // ================= INTERNAL JOIN ROOM =================
-const internalJoinRoom = (roomId, onMessage, onDelete, onRecall) => {
-  if (!stompClient) return;
+const internalJoinRoom = (
+  roomId,
+  onMessage,
+  onDelete,
+  onRecall,
+  onBackground,
+  onReaction,
+  onPin,
+  onPoll
+) => {
+  if (!stompClient || !roomId) return;
 
   const existing = activeRooms[roomId];
+
   if (existing) {
     existing.messageSub?.unsubscribe();
     existing.deleteSub?.unsubscribe();
     existing.recallSub?.unsubscribe();
+    existing.backgroundSub?.unsubscribe();
+    existing.reactionSub?.unsubscribe();
+    existing.pinSub?.unsubscribe();
+    existing.pollSub?.unsubscribe();
+
     delete activeRooms[roomId];
   }
 
@@ -118,40 +162,135 @@ const internalJoinRoom = (roomId, onMessage, onDelete, onRecall) => {
     }
   );
 
+  // ================= BACKGROUND CHANGE =================
+  const backgroundSub = stompClient.subscribe(
+    `/topic/chat/${roomId}/background`,
+    (msg) => {
+      try {
+        const data = JSON.parse(msg.body || "{}");
+        console.log("🖼 BACKGROUND CHANGED:", data);
+        onBackground?.(data);
+      } catch (err) {
+        console.error("Parse background error:", err);
+      }
+    }
+  );
+
+  // ================= REACTION =================
+  const reactionSub = stompClient.subscribe(
+    `/topic/chat/${roomId}/reaction`,
+    (msg) => {
+      try {
+        const data = JSON.parse(msg.body || "{}");
+        console.log("😀 REACTION:", data);
+        onReaction?.(data);
+      } catch (err) {
+        console.error("Parse reaction error:", err);
+      }
+    }
+  );
+
+  // ================= PIN MESSAGE =================
+  const pinSub = stompClient.subscribe(`/topic/chat/${roomId}/pin`, (msg) => {
+    try {
+      const data = JSON.parse(msg.body || "{}");
+      console.log("📌 PIN:", data);
+      onPin?.(data);
+    } catch (err) {
+      console.error("Parse pin error:", err);
+    }
+  });
+
+  // ================= POLL / BÌNH CHỌN =================
+  const pollSub = stompClient.subscribe(`/topic/chat/${roomId}/poll`, (msg) => {
+    try {
+      const data = JSON.parse(msg.body || "{}");
+      console.log("📊 POLL:", data);
+      onPoll?.(data);
+    } catch (err) {
+      console.error("Parse poll error:", err);
+    }
+  });
+
   activeRooms[roomId] = {
     messageSub,
     deleteSub,
     recallSub,
+    backgroundSub,
+    reactionSub,
+    pinSub,
+    pollSub,
+
     callback: onMessage,
     deleteCallback: onDelete,
     recallCallback: onRecall,
+    backgroundCallback: onBackground,
+    reactionCallback: onReaction,
+    pinCallback: onPin,
+    pollCallback: onPoll,
   };
 
   console.log("📌 Joined room:", roomId);
 };
 
 // ================= JOIN ROOM =================
-export const joinRoom = (roomId, onMessage, onDelete, onRecall) => {
-  if (!stompClient) return;
+export const joinRoom = (
+  roomId,
+  onMessage,
+  onDelete,
+  onRecall,
+  onBackground,
+  onReaction,
+  onPin,
+  onPoll
+) => {
+  if (!roomId) return;
 
-  if (connectionState !== "CONNECTED") {
-    pendingRooms[roomId] = { onMessage, onDelete, onRecall };
+  if (!stompClient || connectionState !== "CONNECTED") {
+    pendingRooms[roomId] = {
+      onMessage,
+      onDelete,
+      onRecall,
+      onBackground,
+      onReaction,
+      onPin,
+      onPoll,
+    };
     return;
   }
 
-  internalJoinRoom(roomId, onMessage, onDelete, onRecall);
+  internalJoinRoom(
+    roomId,
+    onMessage,
+    onDelete,
+    onRecall,
+    onBackground,
+    onReaction,
+    onPin,
+    onPoll
+  );
 };
 
 // ================= LEAVE ROOM =================
 export const leaveRoom = (roomId) => {
+  if (!roomId) return;
+
   if (activeRooms[roomId]) {
     activeRooms[roomId].messageSub?.unsubscribe();
     activeRooms[roomId].deleteSub?.unsubscribe();
     activeRooms[roomId].recallSub?.unsubscribe();
+    activeRooms[roomId].backgroundSub?.unsubscribe();
+    activeRooms[roomId].reactionSub?.unsubscribe();
+    activeRooms[roomId].pinSub?.unsubscribe();
+    activeRooms[roomId].pollSub?.unsubscribe();
 
     delete activeRooms[roomId];
 
     console.log("🚪 Left room:", roomId);
+  }
+
+  if (pendingRooms[roomId]) {
+    delete pendingRooms[roomId];
   }
 };
 
@@ -172,24 +311,44 @@ export const sendMessageSocket = (message) => {
 
 // ================= SUBSCRIBE ONLINE STATUS =================
 export const subscribeUserStatus = (callback) => {
-  if (!stompClient || connectionState !== "CONNECTED") return;
+  if (!stompClient || connectionState !== "CONNECTED") return null;
 
-  // 🔥 unsubscribe cũ nếu có
   if (statusSubscription) {
     statusSubscription.unsubscribe();
+    statusSubscription = null;
   }
 
   statusSubscription = stompClient.subscribe("/topic/users/status", (msg) => {
-    const data = JSON.parse(msg.body);
-    console.log("👤 STATUS:", data);
-    callback?.(data);
+    try {
+      const data = JSON.parse(msg.body);
+      console.log("👤 STATUS:", data);
+      callback?.(data);
+    } catch (err) {
+      console.error("Parse user status error:", err);
+    }
   });
 
   return statusSubscription;
 };
 
+// ================= SUBSCRIBE ONLINE LIST =================
+export const subscribeOnlineList = (callback) => {
+  if (!stompClient || connectionState !== "CONNECTED") return null;
+
+  return stompClient.subscribe("/topic/users/list", (msg) => {
+    try {
+      const data = JSON.parse(msg.body);
+      console.log("👥 ONLINE LIST:", data);
+      callback?.(data);
+    } catch (err) {
+      console.error("Parse online list error:", err);
+    }
+  });
+};
+
+// ================= SUBSCRIBE GROUP UPDATES =================
 export const subscribeGroupUpdates = (userId, callback) => {
-  if (!stompClient || connectionState !== "CONNECTED" || !userId) return;
+  if (!stompClient || connectionState !== "CONNECTED" || !userId) return null;
 
   return stompClient.subscribe(`/topic/group-updates/${userId}`, (msg) => {
     try {
@@ -201,25 +360,80 @@ export const subscribeGroupUpdates = (userId, callback) => {
   });
 };
 
+// ================= SUBSCRIBE CONVERSATION UPDATES =================
+export const subscribeConversationUpdates = (userId, callback) => {
+  if (!stompClient || connectionState !== "CONNECTED" || !userId) return null;
+
+  return stompClient.subscribe(
+    `/topic/conversation-updates/${userId}`,
+    (msg) => {
+      try {
+        const data = JSON.parse(msg.body || "{}");
+        console.log("💬 CONVERSATION UPDATE:", data);
+        callback?.(data);
+      } catch (err) {
+        console.error("Parse conversation update error:", err);
+      }
+    }
+  );
+};
+
 // ================= DISCONNECT =================
 export const disconnectSocket = () => {
+  if (statusSubscription) {
+    statusSubscription.unsubscribe();
+    statusSubscription = null;
+  }
+
+  Object.values(activeRooms).forEach((room) => {
+    room.messageSub?.unsubscribe();
+    room.deleteSub?.unsubscribe();
+    room.recallSub?.unsubscribe();
+    room.backgroundSub?.unsubscribe();
+    room.reactionSub?.unsubscribe();
+    room.pinSub?.unsubscribe();
+    room.pollSub?.unsubscribe();
+  });
+
   stompClient?.deactivate();
 
   stompClient = null;
   connectionState = "DISCONNECTED";
+  connectedUserId = null;
 
   activeRooms = {};
   pendingRooms = {};
-  statusSubscription = null;
 
   console.log("❌ SOCKET DISCONNECTED");
 };
-export const subscribeOnlineList = (callback) => {
-  if (!stompClient || connectionState !== "CONNECTED") return;
+export const sendCallSignalSocket = (signal) => {
+  const token = localStorage.getItem("token");
 
-  return stompClient.subscribe("/topic/users/list", (msg) => {
-    const data = JSON.parse(msg.body);
-    console.log("👥 ONLINE LIST:", data);
-    callback?.(data);
+  if (!token || connectionState !== "CONNECTED" || !stompClient) {
+    console.log("BLOCK CALL SIGNAL - socket not ready");
+    return;
+  }
+
+  stompClient.publish({
+    destination: "/app/call.signal",
+    body: JSON.stringify(signal),
+  });
+};
+
+export const subscribeCallSignal = (roomId, callback) => {
+  if (!roomId) return null;
+
+  if (!stompClient || connectionState !== "CONNECTED") {
+    return null;
+  }
+
+  return stompClient.subscribe(`/topic/call/${roomId}`, (msg) => {
+    try {
+      const data = JSON.parse(msg.body || "{}");
+      console.log("📞 CALL SIGNAL:", data);
+      callback?.(data);
+    } catch (err) {
+      console.error("Parse call signal error:", err);
+    }
   });
 };

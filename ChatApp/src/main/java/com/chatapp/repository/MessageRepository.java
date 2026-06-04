@@ -3,6 +3,7 @@ package com.chatapp.repository;
 import com.chatapp.entity.Message;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface MessageRepository extends MongoRepository<Message, String>
@@ -14,6 +15,19 @@ public interface MessageRepository extends MongoRepository<Message, String>
     );
 
     List<Message> findByRoomIdOrderByCreatedAtAsc(String roomId);
+
+    long countByRoomIdAndSenderIdNotAndCreatedAtAfterAndIsRecalledFalse(
+            String roomId,
+            Long senderId,
+            LocalDateTime createdAt
+    );
+
+    List<Message> findBySenderIdOrReceiverIdOrderByCreatedAtDesc(
+            Long senderId,
+            Long receiverId
+    );
+
+    List<Message> findByRoomIdAndPinnedTrueOrderByPinnedAtDesc(String roomId);
 
 
 

@@ -22,7 +22,13 @@ public class ConversationState {
     private String conversationKey;
     private Long userId;
 
+    @Builder.Default
     private Boolean isDeleted = false;
 
     private LocalDateTime deletedAt;
+
+    // Đánh dấu user đã đọc tới thời điểm nào
+    private LocalDateTime lastReadAt;
+
+    private String background;
 }

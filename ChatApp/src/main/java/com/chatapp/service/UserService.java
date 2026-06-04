@@ -9,6 +9,7 @@ import com.chatapp.repository.UserRepository;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import com.chatapp.dto.UserResponse;
 
 import java.util.List;
 import java.util.Optional;
@@ -151,5 +152,30 @@ public class UserService {
     public User getById(Long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+    public UserResponse getUserInfo(Long id) {
+
+        User user = getById(id);
+
+        return UserResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .phone(user.getPhone())
+                .gender(user.getGender() != null ? toGenderText(user.getGender()) : null)
+                .birthday(user.getBirthday())
+                .avatar(user.getAvatar())
+                .coverImage(user.getCoverImage())
+                .role(user.getRole() != null ? user.getRole().name() : null)
+                .build();
+    }
+    private String toGenderText(Gender gender) {
+        if (gender == null) return null;
+
+        if (gender == Gender.MALE) return "Nam";
+        if (gender == Gender.FEMALE) return "Nữ";
+
+        return gender.name();
     }
 }

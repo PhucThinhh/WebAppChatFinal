@@ -28,3 +28,6 @@ export const rejectFriendApi = (id) => {
 export const searchUserApi = (keyword) => {
   return axiosClient.get(`/friends/search?keyword=${keyword}`);
 };
+export const removeFriendApi = (friendId) => {
+  return axiosClient.delete(`/friends/${friendId}`);
+};
